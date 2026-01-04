@@ -236,6 +236,38 @@ export default function NewSongPage() {
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Genre</label>
+            <select
+              name="genre"
+              value={formData.genre || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Select Genre</option>
+              <option value="Rock">Rock</option>
+              <option value="Pop">Pop</option>
+              <option value="Hip-Hop">Hip-Hop</option>
+              <option value="R&B">R&B</option>
+              <option value="Country">Country</option>
+              <option value="Electronic">Electronic</option>
+              <option value="Dance">Dance</option>
+              <option value="Jazz">Jazz</option>
+              <option value="Blues">Blues</option>
+              <option value="Classical">Classical</option>
+              <option value="Metal">Metal</option>
+              <option value="Indie">Indie</option>
+              <option value="Folk">Folk</option>
+              <option value="Reggae">Reggae</option>
+              <option value="Soul">Soul</option>
+              <option value="Funk">Funk</option>
+              <option value="Alternative">Alternative</option>
+              <option value="Punk">Punk</option>
+              <option value="Gospel">Gospel</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
         </div>
 
         {/* Visualization Settings */}

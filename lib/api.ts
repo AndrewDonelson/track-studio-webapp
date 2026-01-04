@@ -43,6 +43,7 @@ export interface QueueItem {
   video_file_path: string;
   video_file_size: number;
   thumbnail_path: string;
+  flag: string | null;
   queued_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -54,6 +55,21 @@ export interface ProgressEvent {
   progress: number;
   current_step: string;
   error_message?: string;
+}
+
+export interface GeneratedImage {
+  id: number;
+  song_id: number;
+  queue_id?: number;
+  image_path: string;
+  prompt: string;
+  negative_prompt: string;
+  image_type: string;
+  sequence_number?: number;
+  width: number;
+  height: number;
+  model: string;
+  created_at: string;
 }
 
 class APIClient {
@@ -148,6 +164,15 @@ class APIClient {
     if (!res.ok) throw new Error('Failed to delete queue item');
   }
 
+  async updateQueueFlag(id: number, flag: string | null): Promise<void> {
+    const res = await fetch(`${this.baseURL}/queue/${id}/flag`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flag }),
+    });
+    if (!res.ok) throw new Error('Failed to update queue flag');
+  }
+
   // Progress streaming
   streamProgress(onProgress: (event: ProgressEvent) => void): EventSource {
     const eventSource = new EventSource(`${this.baseURL}/progress/stream`);
@@ -166,6 +191,30 @@ class APIClient {
     };
 
     return eventSource;
+  }
+
+  // Images
+  async getImagesBySong(songId: number): Promise<GeneratedImage[]> {
+    const res = await fetch(`${this.baseURL}/songs/${songId}/images`);
+    if (!res.ok) throw new Error('Failed to fetch images');
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async updateImagePrompt(imageId: number, prompt: string, negativePrompt: string): Promise<void> {
+    const res = await fetch(`${this.baseURL}/images/${imageId}/prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, negative_prompt: negativePrompt }),
+    });
+    if (!res.ok) throw new Error('Failed to update image prompt');
+  }
+
+  async regenerateImage(imageId: number): Promise<void> {
+    const res = await fetch(`${this.baseURL}/images/${imageId}/regenerate`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to regenerate image');
   }
 }
 

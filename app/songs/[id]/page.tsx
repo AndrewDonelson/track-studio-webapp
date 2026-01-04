@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, Song } from '@/lib/api';
+import { api, Song, GeneratedImage } from '@/lib/api';
 
 type NotificationType = 'success' | 'error' | 'info';
 
@@ -32,6 +32,11 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [notificationId, setNotificationId] = useState(0);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [editingImageId, setEditingImageId] = useState<number | null>(null);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editNegativePrompt, setEditNegativePrompt] = useState('');
 
   const showNotification = (type: NotificationType, message: string) => {
     const id = notificationId;
@@ -64,6 +69,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     loadSong();
+    loadImages();
   }, [songId]);
 
   const loadSong = async () => {
@@ -83,6 +89,18 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       setError(err instanceof Error ? err.message : 'Failed to load song');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadImages = async () => {
+    try {
+      setLoadingImages(true);
+      const images = await api.getImagesBySong(songId);
+      setGeneratedImages(images);
+    } catch (err) {
+      console.error('Failed to load images:', err);
+    } finally {
+      setLoadingImages(false);
     }
   };
 
@@ -206,6 +224,32 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     setHasChanges(true);
     
     showNotification('info', `${type === 'vocals' ? 'Vocals' : 'Music'} stem cleared`);
+  };
+
+  const handleEditImage = (image: GeneratedImage) => {
+    setEditingImageId(image.id);
+    setEditPrompt(image.prompt);
+    setEditNegativePrompt(image.negative_prompt);
+  };
+
+  const handleSaveImagePrompt = async (imageId: number) => {
+    try {
+      await api.updateImagePrompt(imageId, editPrompt, editNegativePrompt);
+      showNotification('success', 'Image prompt updated');
+      setEditingImageId(null);
+      loadImages();
+    } catch (err) {
+      showNotification('error', 'Failed to update prompt: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const handleRegenerateImage = async (imageId: number) => {
+    try {
+      await api.regenerateImage(imageId);
+      showNotification('success', 'Image regeneration queued');
+    } catch (err) {
+      showNotification('error', 'Failed to regenerate: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   const handlePlayAudio = (path: string | undefined, type: 'vocals' | 'music') => {
@@ -380,6 +424,39 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Genre</label>
+            <select
+              name="genre"
+              value={formData.genre || ''}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Select Genre</option>
+              <option value="Rock">Rock</option>
+              <option value="Pop">Pop</option>
+              <option value="Hip-Hop">Hip-Hop</option>
+              <option value="R&B">R&B</option>
+              <option value="Country">Country</option>
+              <option value="Electronic">Electronic</option>
+              <option value="Dance">Dance</option>
+              <option value="Jazz">Jazz</option>
+              <option value="Blues">Blues</option>
+              <option value="Classical">Classical</option>
+              <option value="Metal">Metal</option>
+              <option value="Indie">Indie</option>
+              <option value="Folk">Folk</option>
+              <option value="Reggae">Reggae</option>
+              <option value="Soul">Soul</option>
+              <option value="Funk">Funk</option>
+              <option value="Alternative">Alternative</option>
+              <option value="Punk">Punk</option>
+              <option value="Gospel">Gospel</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
         </div>
 
         {/* Visualization Settings */}
@@ -532,6 +609,111 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
             </div>
           </div>
         </div>
+
+        {/* Generated Images */}
+        {generatedImages.length > 0 && (
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4">Generated Images ({generatedImages.length})</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Review and edit the prompts used to generate images. You can regenerate individual images after editing their prompts.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {generatedImages.map((image) => (
+                <div key={image.id} className="bg-gray-900 border border-gray-700 rounded-lg p-4 space-y-3">
+                  {/* Image Info Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium capitalize">{image.image_type}</div>
+                      {image.sequence_number && (
+                        <div className="text-sm text-gray-500">#{image.sequence_number}</div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">{image.model}</div>
+                  </div>
+
+                  {/* Image Preview */}
+                  <div className="relative aspect-video bg-gray-800 rounded overflow-hidden">
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-600">
+                      🖼️ {image.width}x{image.height}
+                    </div>
+                  </div>
+
+                  {/* Prompt Editor */}
+                  {editingImageId === image.id ? (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Prompt</label>
+                        <textarea
+                          value={editPrompt}
+                          onChange={(e) => setEditPrompt(e.target.value)}
+                          rows={2}
+                          className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Negative Prompt</label>
+                        <textarea
+                          value={editNegativePrompt}
+                          onChange={(e) => setEditNegativePrompt(e.target.value)}
+                          rows={2}
+                          className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveImagePrompt(image.id)}
+                          className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm transition"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingImageId(null)}
+                          className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {image.prompt && (
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Prompt:</div>
+                          <div className="text-sm text-gray-300 line-clamp-2">{image.prompt}</div>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditImage(image)}
+                          className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm transition"
+                        >
+                          ✏️ Edit Prompt
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRegenerateImage(image.id)}
+                          className="flex-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm transition"
+                        >
+                          🔄 Regenerate
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {loadingImages && (
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
+            <div className="text-gray-400">Loading images...</div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="space-y-3">
