@@ -3,6 +3,19 @@
 import { useState, useEffect } from 'react';
 import { api, QueueItem, ProgressEvent } from '@/lib/api';
 
+type NotificationType = 'success' | 'error' | 'info';
+
+interface Notification {
+  id: number;
+  type: NotificationType;
+  message: string;
+}
+
+interface ConfirmDialog {
+  message: string;
+  onConfirm: () => void;
+}
+
 export default function QueuePage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -10,6 +23,22 @@ export default function QueuePage() {
   const [progressMap, setProgressMap] = useState<Record<number, ProgressEvent>>({});
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [notificationId, setNotificationId] = useState(0);
+
+  const showNotification = (type: NotificationType, message: string) => {
+    const id = notificationId;
+    setNotificationId(id + 1);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const showConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmDialog({ message, onConfirm });
+  };
 
   useEffect(() => {
     loadQueue();
@@ -76,19 +105,18 @@ export default function QueuePage() {
   };
 
   const handleCancel = async (queueId: number) => {
-    if (!confirm('Cancel this queue item? This will stop processing and clean up temporary files.')) {
-      return;
-    }
-
-    try {
-      setCancelling(queueId);
-      await api.deleteQueueItem(queueId);
-      await loadQueue();
-    } catch (err) {
-      alert('Failed to cancel: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
-      setCancelling(null);
-    }
+    showConfirm('Cancel this queue item? This will stop processing and clean up temporary files.', async () => {
+      try {
+        setCancelling(queueId);
+        await api.deleteQueueItem(queueId);
+        await loadQueue();
+        showNotification('success', 'Queue item cancelled successfully');
+      } catch (err) {
+        showNotification('error', 'Failed to cancel: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      } finally {
+        setCancelling(null);
+      }
+    });
   };
 
   const handleDelete = async (queueId: number) => {
@@ -96,33 +124,33 @@ export default function QueuePage() {
       setCancelling(queueId);
       await api.deleteQueueItem(queueId);
       await loadQueue();
+      showNotification('success', 'Queue item deleted successfully');
     } catch (err) {
-      alert('Failed to delete: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showNotification('error', 'Failed to delete: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setCancelling(null);
     }
   };
 
   const handleClearCompleted = async () => {
-    const completedItems = queue.filter(q => q.status === 'completed');
+    const completedItems = queue.filter(q => q.status === 'completed' || q.status === 'failed');
     if (completedItems.length === 0) {
-      alert('No completed items to clear');
+      showNotification('info', 'No completed or failed items to clear');
       return;
     }
 
-    if (!confirm(`Clear all ${completedItems.length} completed items?`)) {
-      return;
-    }
-
-    try {
-      setClearingAll(true);
-      await Promise.all(completedItems.map(item => api.deleteQueueItem(item.id)));
-      await loadQueue();
-    } catch (err) {
-      alert('Failed to clear items: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
-      setClearingAll(false);
-    }
+    showConfirm(`Clear all ${completedItems.length} completed/failed items?`, async () => {
+      try {
+        setClearingAll(true);
+        await Promise.all(completedItems.map(item => api.deleteQueueItem(item.id)));
+        await loadQueue();
+        showNotification('success', `Cleared ${completedItems.length} items successfully`);
+      } catch (err) {
+        showNotification('error', 'Failed to clear items: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      } finally {
+        setClearingAll(false);
+      }
+    });
   };
 
   const getElapsedTime = (startedAt: string) => {
@@ -158,6 +186,56 @@ export default function QueuePage() {
 
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`px-6 py-4 rounded-lg shadow-lg border animate-slide-in-right ${
+              notification.type === 'success'
+                ? 'bg-green-900/90 border-green-500 text-green-100'
+                : notification.type === 'error'
+                ? 'bg-red-900/90 border-red-500 text-red-100'
+                : 'bg-blue-900/90 border-blue-500 text-blue-100'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">
+                {notification.type === 'success' ? '✓' : notification.type === 'error' ? '✕' : 'ℹ'}
+              </span>
+              <span>{notification.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold mb-4">Confirm Action</h3>
+            <p className="text-gray-300 mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -171,7 +249,7 @@ export default function QueuePage() {
         <div className="flex gap-2">
           <button
             onClick={handleClearCompleted}
-            disabled={clearingAll || queue.filter(q => q.status === 'completed').length === 0}
+            disabled={clearingAll || queue.filter(q => q.status === 'completed' || q.status === 'failed').length === 0}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {clearingAll ? 'Clearing...' : '🧹 Clear Completed'}

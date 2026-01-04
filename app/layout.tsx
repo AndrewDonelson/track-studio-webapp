@@ -24,12 +24,18 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
                 <div className="flex items-center">
-                  <Link href="/" className="flex items-center space-x-2">
+                  <Link href="/videos" className="flex items-center space-x-2">
                     <div className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
                       TrackStudio
                     </div>
                   </Link>
                   <div className="ml-10 flex items-baseline space-x-4">
+                    <Link
+                      href="/videos"
+                      className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
+                    >
+                      Videos
+                    </Link>
                     <Link
                       href="/songs"
                       className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"

@@ -4,6 +4,19 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, Song } from '@/lib/api';
 
+type NotificationType = 'success' | 'error' | 'info';
+
+interface Notification {
+  id: number;
+  type: NotificationType;
+  message: string;
+}
+
+interface ConfirmDialog {
+  message: string;
+  onConfirm: () => void;
+}
+
 export default function EditSongPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
@@ -16,6 +29,22 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   const [hasChanges, setHasChanges] = useState(false);
   const [originalData, setOriginalData] = useState<Partial<Song>>({});
   const [hasVideo, setHasVideo] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [notificationId, setNotificationId] = useState(0);
+
+  const showNotification = (type: NotificationType, message: string) => {
+    const id = notificationId;
+    setNotificationId(id + 1);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const showConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmDialog({ message, onConfirm });
+  };
 
   const [formData, setFormData] = useState<Partial<Song>>({
     title: '',
@@ -65,9 +94,10 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       await api.updateSong(songId, formData);
       setHasChanges(false);
       setOriginalData(formData);
-      router.push('/songs');
+      showNotification('success', 'Song saved successfully!');
+      setTimeout(() => router.push('/songs'), 1000);
     } catch (err) {
-      alert('Failed to save song: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showNotification('error', 'Failed to save song: ' + (err instanceof Error ? err.message : 'Unknown error'));
       setSaving(false);
     }
   };
@@ -98,25 +128,29 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
 
   const handleRender = async () => {
     if (hasChanges) {
-      if (!confirm('You have unsaved changes. Save before rendering?')) {
-        return;
-      }
-      try {
-        await api.updateSong(songId, formData);
-        setHasChanges(false);
-        setOriginalData(formData);
-      } catch (err) {
-        alert('Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'));
-        return;
-      }
+      showConfirm('You have unsaved changes. Save before rendering?', async () => {
+        try {
+          await api.updateSong(songId, formData);
+          setHasChanges(false);
+          setOriginalData(formData);
+          proceedToRender();
+        } catch (err) {
+          showNotification('error', 'Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        }
+      });
+      return;
     }
     
+    proceedToRender();
+  };
+
+  const proceedToRender = async () => {
     try {
       await api.addToQueue(songId, 5);
-      alert('Song added to render queue!');
-      router.push('/queue');
+      showNotification('success', 'Song added to render queue!');
+      setTimeout(() => router.push('/queue'), 1000);
     } catch (err) {
-      alert('Failed to add to queue: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showNotification('error', 'Failed to add to queue: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -127,19 +161,51 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        // Construct expected full path
-        const fullPath = `/home/andrew/Development/Fullstack-Projects/TrackStudio/test-files/land_of_love/${file.name}`;
-        setFormData(prev => ({ ...prev, [fieldName]: fullPath }));
-        setHasChanges(true);
+        // Browser can't access full filesystem path for security reasons
+        // Prompt user to enter the full path manually
+        const fileName = file.name;
+        const fullPath = prompt(
+          `Enter the full path to the file:\n\nFilename: ${fileName}`,
+          `/home/andrew/Music/Tristan Hart/TrackStudio-Stem-Files/${fileName}`
+        );
         
-        // Create audio element for preview using blob URL
-        const blobUrl = URL.createObjectURL(file);
-        const audio = new Audio(blobUrl);
-        const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
-        setAudioElements(prev => ({ ...prev, [type]: audio }));
+        if (fullPath) {
+          setFormData(prev => ({ ...prev, [fieldName]: fullPath }));
+          setHasChanges(true);
+          
+          // Create audio element for preview using blob URL
+          const blobUrl = URL.createObjectURL(file);
+          const audio = new Audio(blobUrl);
+          const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
+          setAudioElements(prev => ({ ...prev, [type]: audio }));
+        }
       }
     };
     input.click();
+  };
+
+  const handleClearStem = (fieldName: 'vocals_stem_path' | 'music_stem_path') => {
+    const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
+    
+    // Stop and remove audio element if playing
+    const audio = audioElements[type];
+    if (audio) {
+      audio.pause();
+      if (playingAudio === type) {
+        setPlayingAudio(null);
+      }
+    }
+    
+    // Clear the path and audio element
+    setFormData(prev => ({ ...prev, [fieldName]: '' }));
+    setAudioElements(prev => {
+      const newElements = { ...prev };
+      delete newElements[type];
+      return newElements;
+    });
+    setHasChanges(true);
+    
+    showNotification('info', `${type === 'vocals' ? 'Vocals' : 'Music'} stem cleared`);
   };
 
   const handlePlayAudio = (path: string | undefined, type: 'vocals' | 'music') => {
@@ -147,7 +213,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     
     const audio = audioElements[type];
     if (!audio) {
-      alert('Please select an audio file first');
+      showNotification('info', 'Please select an audio file first');
       return;
     }
     
@@ -165,7 +231,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       // Play this audio
       audio.play().catch(err => {
         console.error('Audio play error:', err);
-        alert('Cannot play audio file');
+        showNotification('error', 'Cannot play audio file');
       });
       setPlayingAudio(type);
       
@@ -197,6 +263,56 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`px-6 py-4 rounded-lg shadow-lg border animate-slide-in-right ${
+              notification.type === 'success'
+                ? 'bg-green-900/90 border-green-500 text-green-100'
+                : notification.type === 'error'
+                ? 'bg-red-900/90 border-red-500 text-red-100'
+                : 'bg-blue-900/90 border-blue-500 text-blue-100'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">
+                {notification.type === 'success' ? '✓' : notification.type === 'error' ? '✕' : 'ℹ'}
+              </span>
+              <span>{notification.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold mb-4">Confirm Action</h3>
+            <p className="text-gray-300 mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+              >
+                Save & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -348,8 +464,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                 name="vocals_stem_path"
                 value={formData.vocals_stem_path || ''}
                 onChange={handleChange}
-                placeholder="No file selected"
-                readOnly
+                placeholder="Enter full path or click Select File"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -367,6 +482,15 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
               >
                 {playingAudio === 'vocals' ? '⏸ Pause' : '▶ Play'}
               </button>
+              <button
+                type="button"
+                onClick={() => handleClearStem('vocals_stem_path')}
+                disabled={!formData.vocals_stem_path}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Clear vocals stem"
+              >
+                🗑 Clear
+              </button>
             </div>
           </div>
 
@@ -378,8 +502,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                 name="music_stem_path"
                 value={formData.music_stem_path || ''}
                 onChange={handleChange}
-                placeholder="No file selected"
-                readOnly
+                placeholder="Enter full path or click Select File"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -396,6 +519,15 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {playingAudio === 'music' ? '⏸ Pause' : '▶ Play'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleClearStem('music_stem_path')}
+                disabled={!formData.music_stem_path}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Clear music stem"
+              >
+                🗑 Clear
               </button>
             </div>
           </div>

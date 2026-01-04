@@ -4,6 +4,19 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api, Song } from '@/lib/api';
 
+type NotificationType = 'success' | 'error' | 'info';
+
+interface Notification {
+  id: number;
+  type: NotificationType;
+  message: string;
+}
+
+interface ConfirmDialog {
+  message: string;
+  onConfirm: () => void;
+}
+
 export default function SongsPage() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +26,22 @@ export default function SongsPage() {
   const [playingAudio, setPlayingAudio] = useState<number | null>(null);
   const [videoMap, setVideoMap] = useState<Record<number, string>>({});
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [notificationId, setNotificationId] = useState(0);
+
+  const showNotification = (type: NotificationType, message: string) => {
+    const id = notificationId;
+    setNotificationId(id + 1);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const showConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmDialog({ message, onConfirm });
+  };
 
   useEffect(() => {
     loadSongs();
@@ -69,25 +98,26 @@ export default function SongsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this song?')) return;
-
-    try {
-      setDeletingId(id);
-      await api.deleteSong(id);
-      setSongs(songs.filter(s => s.id !== id));
-    } catch (err) {
-      alert('Failed to delete song: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
-      setDeletingId(null);
-    }
+    showConfirm('Are you sure you want to delete this song?', async () => {
+      try {
+        setDeletingId(id);
+        await api.deleteSong(id);
+        setSongs(songs.filter(s => s.id !== id));
+        showNotification('success', 'Song deleted successfully');
+      } catch (err) {
+        showNotification('error', 'Failed to delete song: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      } finally {
+        setDeletingId(null);
+      }
+    });
   };
 
   const handleAddToQueue = async (songId: number) => {
     try {
       await api.addToQueue(songId, 5);
-      alert('Song added to queue!');
+      showNotification('success', 'Song added to queue!');
     } catch (err) {
-      alert('Failed to add to queue: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showNotification('error', 'Failed to add to queue: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -134,6 +164,56 @@ export default function SongsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`px-6 py-4 rounded-lg shadow-lg border animate-slide-in-right ${
+              notification.type === 'success'
+                ? 'bg-green-900/90 border-green-500 text-green-100'
+                : notification.type === 'error'
+                ? 'bg-red-900/90 border-red-500 text-red-100'
+                : 'bg-blue-900/90 border-blue-500 text-blue-100'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">
+                {notification.type === 'success' ? '✓' : notification.type === 'error' ? '✕' : 'ℹ'}
+              </span>
+              <span>{notification.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-semibold mb-4">Confirm Action</h3>
+            <p className="text-gray-300 mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

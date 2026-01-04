@@ -4,11 +4,30 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, Song } from '@/lib/api';
 
+type NotificationType = 'success' | 'error' | 'info';
+
+interface Notification {
+  id: number;
+  type: NotificationType;
+  message: string;
+}
+
 export default function NewSongPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<'vocals' | 'music' | null>(null);
   const [audioElements, setAudioElements] = useState<{ vocals?: HTMLAudioElement; music?: HTMLAudioElement }>({});
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationId, setNotificationId] = useState(0);
+
+  const showNotification = (type: NotificationType, message: string) => {
+    const id = notificationId;
+    setNotificationId(id + 1);
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
 
   const [formData, setFormData] = useState<Partial<Song>>({
     title: '',
@@ -49,9 +68,10 @@ export default function NewSongPage() {
       const newSong = await api.createSong(formData);
       // Clear localStorage after successful save
       localStorage.removeItem('trackstudio_new_song');
-      router.push(`/songs/${newSong.id}`);
+      showNotification('success', 'Song created successfully!');
+      setTimeout(() => router.push(`/songs/${newSong.id}`), 1000);
     } catch (err) {
-      alert('Failed to create song: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showNotification('error', 'Failed to create song: ' + (err instanceof Error ? err.message : 'Unknown error'));
       setSaving(false);
     }
   };
@@ -72,20 +92,49 @@ export default function NewSongPage() {
     input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        // Get the full path (or at least the filename with path prefix)
-        // In browser, we can't get real filesystem path, so we'll use file name
-        // For now, construct expected path based on test files location
-        const fullPath = `/home/andrew/Development/Fullstack-Projects/TrackStudio/test-files/land_of_love/${file.name}`;
-        setFormData(prev => ({ ...prev, [fieldName]: fullPath }));
+        // Browser can't access full filesystem path for security reasons
+        // Prompt user to enter the full path manually
+        const fileName = file.name;
+        const fullPath = prompt(
+          `Enter the full path to the file:\n\nFilename: ${fileName}`,
+          `/home/andrew/Music/Tristan Hart/TrackStudio-Stem-Files/${fileName}`
+        );
         
-        // Create audio element for preview using blob URL
-        const blobUrl = URL.createObjectURL(file);
-        const audio = new Audio(blobUrl);
-        const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
-        setAudioElements(prev => ({ ...prev, [type]: audio }));
+        if (fullPath) {
+          setFormData(prev => ({ ...prev, [fieldName]: fullPath }));
+          
+          // Create audio element for preview using blob URL
+          const blobUrl = URL.createObjectURL(file);
+          const audio = new Audio(blobUrl);
+          const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
+          setAudioElements(prev => ({ ...prev, [type]: audio }));
+        }
       }
     };
     input.click();
+  };
+
+  const handleClearStem = (fieldName: 'vocals_stem_path' | 'music_stem_path') => {
+    const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
+    
+    // Stop and remove audio element if playing
+    const audio = audioElements[type];
+    if (audio) {
+      audio.pause();
+      if (playingAudio === type) {
+        setPlayingAudio(null);
+      }
+    }
+    
+    // Clear the path and audio element
+    setFormData(prev => ({ ...prev, [fieldName]: '' }));
+    setAudioElements(prev => {
+      const newElements = { ...prev };
+      delete newElements[type];
+      return newElements;
+    });
+    
+    showNotification('info', `${type === 'vocals' ? 'Vocals' : 'Music'} stem cleared`);
   };
 
   const handlePlayAudio = (path: string | undefined, type: 'vocals' | 'music') => {
@@ -93,7 +142,7 @@ export default function NewSongPage() {
     
     const audio = audioElements[type];
     if (!audio) {
-      alert('Please select an audio file first');
+      showNotification('info', 'Please select an audio file first');
       return;
     }
     
@@ -111,7 +160,7 @@ export default function NewSongPage() {
       // Play this audio
       audio.play().catch(err => {
         console.error('Audio play error:', err);
-        alert('Cannot play audio file');
+        showNotification('error', 'Cannot play audio file');
       });
       setPlayingAudio(type);
       
@@ -121,6 +170,29 @@ export default function NewSongPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`px-6 py-4 rounded-lg shadow-lg border animate-slide-in-right ${
+              notification.type === 'success'
+                ? 'bg-green-900/90 border-green-500 text-green-100'
+                : notification.type === 'error'
+                ? 'bg-red-900/90 border-red-500 text-red-100'
+                : 'bg-blue-900/90 border-blue-500 text-blue-100'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">
+                {notification.type === 'success' ? '✓' : notification.type === 'error' ? '✕' : 'ℹ'}
+              </span>
+              <span>{notification.message}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -247,8 +319,7 @@ export default function NewSongPage() {
                 name="vocals_stem_path"
                 value={formData.vocals_stem_path || ''}
                 onChange={handleChange}
-                placeholder="No file selected"
-                readOnly
+                placeholder="Enter full path or click Select File"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -266,6 +337,15 @@ export default function NewSongPage() {
               >
                 {playingAudio === 'vocals' ? '⏸ Pause' : '▶ Play'}
               </button>
+              <button
+                type="button"
+                onClick={() => handleClearStem('vocals_stem_path')}
+                disabled={!formData.vocals_stem_path}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Clear vocals stem"
+              >
+                🗑 Clear
+              </button>
             </div>
           </div>
 
@@ -277,8 +357,7 @@ export default function NewSongPage() {
                 name="music_stem_path"
                 value={formData.music_stem_path || ''}
                 onChange={handleChange}
-                placeholder="No file selected"
-                readOnly
+                placeholder="Enter full path or click Select File"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -295,6 +374,15 @@ export default function NewSongPage() {
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {playingAudio === 'music' ? '⏸ Pause' : '▶ Play'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleClearStem('music_stem_path')}
+                disabled={!formData.music_stem_path}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Clear music stem"
+              >
+                🗑 Clear
               </button>
             </div>
           </div>
