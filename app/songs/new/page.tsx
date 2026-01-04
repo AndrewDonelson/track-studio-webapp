@@ -15,14 +15,13 @@ interface Notification {
 export default function NewSongPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [playingAudio, setPlayingAudio] = useState<'vocals' | 'music' | null>(null);
-  const [audioElements, setAudioElements] = useState<{ vocals?: HTMLAudioElement; music?: HTMLAudioElement }>({});
+  const [uploading, setUploading] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [notificationId, setNotificationId] = useState(0);
+  const [vocalsFile, setVocalsFile] = useState<File | null>(null);
+  const [musicFile, setMusicFile] = useState<File | null>(null);
 
   const showNotification = (type: NotificationType, message: string) => {
-    const id = notificationId;
-    setNotificationId(id + 1);
+    const id = Date.now() + Math.random(); // Use timestamp + random for unique ID
     setNotifications(prev => [...prev, { id, type, message }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -65,11 +64,112 @@ export default function NewSongPage() {
     
     try {
       setSaving(true);
-      const newSong = await api.createSong(formData);
+      
+      // Generate karaoke lyrics if song lyrics exist but karaoke doesn't
+      let karaokeToSave = formData.lyrics_karaoke;
+      if (formData.lyrics && !karaokeToSave) {
+        showNotification('info', 'Generating karaoke lyrics...');
+        
+        // Generate karaoke lyrics inline
+        let lines = formData.lyrics.split('\n');
+        const formatted: string[] = [];
+
+        // Remove section labels and bracketed lines
+        lines = lines.filter(line => {
+          const trimmed = line.trim().toLowerCase();
+          if (trimmed.startsWith('verse') || 
+              trimmed.startsWith('chorus') || 
+              trimmed.startsWith('pre-chorus') || 
+              trimmed.startsWith('bridge') || 
+              trimmed.startsWith('intro') || 
+              trimmed.startsWith('outro') ||
+              trimmed.startsWith('[') || 
+              trimmed.startsWith('(')) {
+            return false;
+          }
+          return true;
+        });
+
+        // Process each line
+        for (let line of lines) {
+          const trimmed = line.trim();
+          
+          if (trimmed.length === 0) {
+            formatted.push('');
+            continue;
+          }
+
+          if (trimmed.length > 30) {
+            const commaIndex = trimmed.indexOf(',');
+            const middlePoint = Math.floor(trimmed.length / 2);
+            
+            if (commaIndex > 0 && Math.abs(commaIndex - middlePoint) <= 10) {
+              const firstPart = trimmed.substring(0, commaIndex).trim();
+              const secondPart = trimmed.substring(commaIndex + 1).trim();
+              formatted.push(firstPart.replace(/[.,!?;:]$/, ''));
+              formatted.push(secondPart.replace(/[.,!?;:]$/, ''));
+            } else {
+              formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
+            }
+          } else {
+            formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
+          }
+        }
+
+        // Join paragraphs
+        const paragraphs: string[] = [];
+        let currentParagraph: string[] = [];
+        
+        for (const line of formatted) {
+          if (line === '') {
+            if (currentParagraph.length > 0) {
+              paragraphs.push(currentParagraph.join('\n'));
+              currentParagraph = [];
+            }
+          } else {
+            currentParagraph.push(line);
+          }
+        }
+        
+        if (currentParagraph.length > 0) {
+          paragraphs.push(currentParagraph.join('\n'));
+        }
+        
+        karaokeToSave = paragraphs.join('\n\n');
+      }
+      
+      // Create the song with all data including karaoke lyrics (without file paths yet)
+      const songDataToSave = {
+        ...formData,
+        lyrics_karaoke: karaokeToSave || formData.lyrics, // Fallback to regular lyrics
+        vocals_stem_path: '', // Will be set after upload
+        music_stem_path: '', // Will be set after upload
+      };
+      
+      showNotification('info', 'Creating song...');
+      const newSong = await api.createSong(songDataToSave);
+      
+      // Upload audio files if provided
+      if (vocalsFile || musicFile) {
+        try {
+          setUploading(true);
+          showNotification('info', 'Uploading audio files...');
+          await api.uploadAudio(newSong.id, vocalsFile || undefined, musicFile || undefined);
+          showNotification('success', 'Audio files uploaded!');
+        } catch (uploadErr) {
+          showNotification('error', 'Warning: Failed to upload audio files: ' + (uploadErr instanceof Error ? uploadErr.message : 'Unknown error'));
+        } finally {
+          setUploading(false);
+        }
+      }
+      
       // Clear localStorage after successful save
       localStorage.removeItem('trackstudio_new_song');
-      showNotification('success', 'Song created successfully!');
-      setTimeout(() => router.push(`/songs/${newSong.id}`), 1000);
+      
+      showNotification('success', 'Song created! Redirecting to edit page...');
+      
+      // Redirect to edit page after a short delay
+      setTimeout(() => router.push(`/songs/${newSong.id}`), 500);
     } catch (err) {
       showNotification('error', 'Failed to create song: ' + (err instanceof Error ? err.message : 'Unknown error'));
       setSaving(false);
@@ -85,6 +185,96 @@ export default function NewSongPage() {
     }));
   };
 
+  const formatLyrics = () => {
+    if (!formData.lyrics) return;
+
+    let lines = formData.lyrics.split('\n');
+    const formatted: string[] = [];
+
+    // Step 1 & 2: Remove section labels and bracketed lines
+    lines = lines.filter(line => {
+      const trimmed = line.trim().toLowerCase();
+      // Remove lines starting with section labels
+      if (trimmed.startsWith('verse') || 
+          trimmed.startsWith('chorus') || 
+          trimmed.startsWith('pre-chorus') || 
+          trimmed.startsWith('bridge') || 
+          trimmed.startsWith('intro') || 
+          trimmed.startsWith('outro')) {
+        return false;
+      }
+      // Remove lines starting with [ or (
+      if (trimmed.startsWith('[') || trimmed.startsWith('(')) {
+        return false;
+      }
+      return true;
+    });
+
+    // Step 3: Process each line for length and split if needed
+    for (let line of lines) {
+      const trimmed = line.trim();
+      
+      if (trimmed.length === 0) {
+        formatted.push('');
+        continue;
+      }
+
+      if (trimmed.length > 30) {
+        // Look for comma to split line
+        const commaIndex = trimmed.indexOf(',');
+        const middlePoint = Math.floor(trimmed.length / 2);
+        
+        // If there's a comma within reasonable range of middle (±10 chars)
+        if (commaIndex > 0 && Math.abs(commaIndex - middlePoint) <= 10) {
+          // Split at comma
+          const firstPart = trimmed.substring(0, commaIndex).trim();
+          const secondPart = trimmed.substring(commaIndex + 1).trim();
+          
+          // Remove ending punctuation from both parts
+          formatted.push(firstPart.replace(/[.,!?;:]$/, ''));
+          formatted.push(secondPart.replace(/[.,!?;:]$/, ''));
+        } else {
+          // No suitable comma, just remove ending punctuation
+          formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
+        }
+      } else {
+        // Line is fine, just remove ending punctuation
+        formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
+      }
+    }
+
+    // Step 4: Ensure paragraphs are separated by single empty line
+    const paragraphs: string[] = [];
+    let currentParagraph: string[] = [];
+    
+    for (const line of formatted) {
+      if (line === '') {
+        if (currentParagraph.length > 0) {
+          paragraphs.push(currentParagraph.join('\n'));
+          currentParagraph = [];
+        }
+      } else {
+        currentParagraph.push(line);
+      }
+    }
+    
+    // Add last paragraph if exists
+    if (currentParagraph.length > 0) {
+      paragraphs.push(currentParagraph.join('\n'));
+    }
+
+    // Step 5: Join paragraphs with single empty line
+    const finalLyrics = paragraphs.join('\n\n');
+
+    // Update lyrics_karaoke field
+    setFormData(prev => ({
+      ...prev,
+      lyrics_karaoke: finalLyrics,
+    }));
+    
+    showNotification('success', 'Karaoke lyrics generated successfully!');
+  };
+
   const handleFileSelect = (fieldName: 'vocals_stem_path' | 'music_stem_path') => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -92,23 +282,19 @@ export default function NewSongPage() {
     input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        // Browser can't access full filesystem path for security reasons
-        // Prompt user to enter the full path manually
-        const fileName = file.name;
-        const fullPath = prompt(
-          `Enter the full path to the file:\n\nFilename: ${fileName}`,
-          `/home/andrew/Music/Tristan Hart/TrackStudio-Stem-Files/${fileName}`
-        );
+        const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
         
-        if (fullPath) {
-          setFormData(prev => ({ ...prev, [fieldName]: fullPath }));
-          
-          // Create audio element for preview using blob URL
-          const blobUrl = URL.createObjectURL(file);
-          const audio = new Audio(blobUrl);
-          const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
-          setAudioElements(prev => ({ ...prev, [type]: audio }));
+        // Store the file for upload
+        if (type === 'vocals') {
+          setVocalsFile(file);
+        } else {
+          setMusicFile(file);
         }
+        
+        // Update form with filename
+        setFormData(prev => ({ ...prev, [fieldName]: file.name }));
+        
+        showNotification('success', `${type === 'vocals' ? 'Vocals' : 'Music'} file selected: ${file.name}`);
       }
     };
     input.click();
@@ -117,55 +303,16 @@ export default function NewSongPage() {
   const handleClearStem = (fieldName: 'vocals_stem_path' | 'music_stem_path') => {
     const type = fieldName === 'vocals_stem_path' ? 'vocals' : 'music';
     
-    // Stop and remove audio element if playing
-    const audio = audioElements[type];
-    if (audio) {
-      audio.pause();
-      if (playingAudio === type) {
-        setPlayingAudio(null);
-      }
+    // Clear the file and path
+    if (type === 'vocals') {
+      setVocalsFile(null);
+    } else {
+      setMusicFile(null);
     }
     
-    // Clear the path and audio element
     setFormData(prev => ({ ...prev, [fieldName]: '' }));
-    setAudioElements(prev => {
-      const newElements = { ...prev };
-      delete newElements[type];
-      return newElements;
-    });
     
     showNotification('info', `${type === 'vocals' ? 'Vocals' : 'Music'} stem cleared`);
-  };
-
-  const handlePlayAudio = (path: string | undefined, type: 'vocals' | 'music') => {
-    if (!path) return;
-    
-    const audio = audioElements[type];
-    if (!audio) {
-      showNotification('info', 'Please select an audio file first');
-      return;
-    }
-    
-    if (playingAudio === type) {
-      // Pause
-      audio.pause();
-      setPlayingAudio(null);
-    } else {
-      // Stop other audio if playing
-      if (playingAudio) {
-        const otherAudio = audioElements[playingAudio];
-        if (otherAudio) otherAudio.pause();
-      }
-      
-      // Play this audio
-      audio.play().catch(err => {
-        console.error('Audio play error:', err);
-        showNotification('error', 'Cannot play audio file');
-      });
-      setPlayingAudio(type);
-      
-      audio.onended = () => setPlayingAudio(null);
-    }
   };
 
   return (
@@ -324,19 +471,53 @@ export default function NewSongPage() {
         </div>
 
         {/* Lyrics */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-6">
           <h2 className="text-xl font-semibold mb-4">Lyrics</h2>
-          <textarea
-            name="lyrics"
-            value={formData.lyrics || ''}
-            onChange={handleChange}
-            rows={15}
-            placeholder="Enter song lyrics here..."
-            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
-          />
-          <p className="text-gray-500 text-sm mt-2">
-            Line count: {(formData.lyrics || '').split('\n').length}
-          </p>
+          
+          {/* Song Lyrics (with sections) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Song Lyrics (with sections like [Verse], [Chorus])
+            </label>
+            <textarea
+              name="lyrics"
+              value={formData.lyrics || ''}
+              onChange={handleChange}
+              rows={10}
+              placeholder="Enter song lyrics with section labels like [Verse 1], [Chorus], etc."
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
+            />
+            <div className="flex items-center justify-between mt-2">
+              <button
+                type="button"
+                onClick={formatLyrics}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm"
+              >
+                Generate Karaoke Lyrics →
+              </button>
+              <p className="text-gray-500 text-sm">
+                Line count: {(formData.lyrics || '').split('\n').length}
+              </p>
+            </div>
+          </div>
+
+          {/* Karaoke Lyrics (for display) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Karaoke Lyrics (display version - no section labels)
+            </label>
+            <textarea
+              name="lyrics_karaoke"
+              value={formData.lyrics_karaoke || ''}
+              onChange={handleChange}
+              rows={10}
+              placeholder="Click 'Generate Karaoke Lyrics' above to auto-format from song lyrics"
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
+            />
+            <p className="text-gray-500 text-sm mt-2">
+              Line count: {(formData.lyrics_karaoke || '').split('\n').length}
+            </p>
+          </div>
         </div>
 
         {/* Audio Files */}
@@ -350,8 +531,8 @@ export default function NewSongPage() {
                 type="text"
                 name="vocals_stem_path"
                 value={formData.vocals_stem_path || ''}
-                onChange={handleChange}
-                placeholder="Enter full path or click Select File"
+                readOnly
+                placeholder="No file selected"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -360,14 +541,6 @@ export default function NewSongPage() {
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition whitespace-nowrap"
               >
                 📁 Select File
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePlayAudio(formData.vocals_stem_path, 'vocals')}
-                disabled={!formData.vocals_stem_path}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {playingAudio === 'vocals' ? '⏸ Pause' : '▶ Play'}
               </button>
               <button
                 type="button"
@@ -388,8 +561,8 @@ export default function NewSongPage() {
                 type="text"
                 name="music_stem_path"
                 value={formData.music_stem_path || ''}
-                onChange={handleChange}
-                placeholder="Enter full path or click Select File"
+                readOnly
+                placeholder="No file selected"
                 className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -398,14 +571,6 @@ export default function NewSongPage() {
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition whitespace-nowrap"
               >
                 📁 Select File
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePlayAudio(formData.music_stem_path, 'music')}
-                disabled={!formData.music_stem_path}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {playingAudio === 'music' ? '⏸ Pause' : '▶ Play'}
               </button>
               <button
                 type="button"

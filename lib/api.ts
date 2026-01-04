@@ -8,6 +8,7 @@ export interface Song {
   artist_name: string;
   genre: string;
   lyrics: string;
+  lyrics_karaoke?: string;
   lyrics_display: string;
   lyrics_sections: string;
   duration_seconds: number;
@@ -74,13 +75,52 @@ export interface GeneratedImage {
 
 class APIClient {
   private baseURL: string;
+  private lastHealthCheck: number = 0;
+  private healthCheckInterval: number = 30000; // 30 seconds
+  private isHealthy: boolean = true;
 
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
   }
 
+  // Health check
+  async checkHealth(): Promise<boolean> {
+    try {
+      const healthURL = this.baseURL.replace('/api/v1', '/health');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const res = await fetch(healthURL, {
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      this.isHealthy = res.ok;
+      this.lastHealthCheck = Date.now();
+      return res.ok;
+    } catch (error) {
+      this.isHealthy = false;
+      this.lastHealthCheck = Date.now();
+      return false;
+    }
+  }
+
+  private async ensureHealthy(): Promise<void> {
+    // Check if we need to do a health check
+    const now = Date.now();
+    if (now - this.lastHealthCheck > this.healthCheckInterval || !this.isHealthy) {
+      const healthy = await this.checkHealth();
+      if (!healthy) {
+        throw new Error('Orchestrator API is not available. Please check if the server is running on port 8080.');
+      }
+    } else if (!this.isHealthy) {
+      throw new Error('Orchestrator API is not available. Please check if the server is running on port 8080.');
+    }
+  }
+
   // Songs
   async getSongs(): Promise<Song[]> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs`);
     if (!res.ok) throw new Error('Failed to fetch songs');
     const data = await res.json();
@@ -88,12 +128,14 @@ class APIClient {
   }
 
   async getSong(id: number): Promise<Song> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs/${id}`);
     if (!res.ok) throw new Error('Failed to fetch song');
     return res.json();
   }
 
   async createSong(song: Partial<Song>): Promise<Song> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -104,6 +146,7 @@ class APIClient {
   }
 
   async updateSong(id: number, song: Partial<Song>): Promise<Song> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -114,14 +157,48 @@ class APIClient {
   }
 
   async deleteSong(id: number): Promise<void> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs/${id}`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete song');
   }
 
+  async analyzeSong(id: number): Promise<Song> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${id}/analyze`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to analyze audio');
+    const data = await res.json();
+    return data.song;
+  }
+
+  async uploadAudio(id: number, vocalsFile?: File, musicFile?: File): Promise<Song> {
+    await this.ensureHealthy();
+    const formData = new FormData();
+    
+    if (vocalsFile) {
+      formData.append('vocals', vocalsFile);
+    }
+    
+    if (musicFile) {
+      formData.append('music', musicFile);
+    }
+    
+    const res = await fetch(`${this.baseURL}/songs/${id}/upload-audio`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!res.ok) throw new Error('Failed to upload audio files');
+    const data = await res.json();
+    return data.song;
+  }
+
   // Queue
   async getQueue(): Promise<QueueItem[]> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue`);
     if (!res.ok) throw new Error('Failed to fetch queue');
     const data = await res.json();
@@ -132,12 +209,14 @@ class APIClient {
   }
 
   async getQueueItem(id: number): Promise<QueueItem> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue/${id}`);
     if (!res.ok) throw new Error('Failed to fetch queue item');
     return res.json();
   }
 
   async addToQueue(songId: number, priority: number = 0): Promise<QueueItem> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -148,6 +227,7 @@ class APIClient {
   }
 
   async updateQueueItem(id: number, updates: Partial<QueueItem>): Promise<QueueItem> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -158,6 +238,7 @@ class APIClient {
   }
 
   async deleteQueueItem(id: number): Promise<void> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue/${id}`, {
       method: 'DELETE',
     });
@@ -165,6 +246,7 @@ class APIClient {
   }
 
   async updateQueueFlag(id: number, flag: string | null): Promise<void> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/queue/${id}/flag`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -195,13 +277,26 @@ class APIClient {
 
   // Images
   async getImagesBySong(songId: number): Promise<GeneratedImage[]> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs/${songId}/images`);
     if (!res.ok) throw new Error('Failed to fetch images');
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   }
 
+  async createImagePrompt(songId: number, imageData: Partial<GeneratedImage>): Promise<GeneratedImage> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${songId}/images`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(imageData),
+    });
+    if (!res.ok) throw new Error('Failed to create image prompt');
+    return await res.json();
+  }
+
   async updateImagePrompt(imageId: number, prompt: string, negativePrompt: string): Promise<void> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/images/${imageId}/prompt`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -211,10 +306,40 @@ class APIClient {
   }
 
   async regenerateImage(imageId: number): Promise<void> {
+    await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/images/${imageId}/regenerate`, {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to regenerate image');
+  }
+
+  async generatePromptFromLyrics(
+    lyricsText: string,
+    sectionType: string,
+    genre: string,
+    backgroundStyle: string
+  ): Promise<{ prompt: string; negative_prompt: string }> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/images/generate-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lyrics: lyricsText,
+        section_type: sectionType,
+        genre,
+        background_style: backgroundStyle,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to generate prompt');
+    return await res.json();
+  }
+
+  async deleteAllImagesBySong(songId: number): Promise<void> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${songId}/images`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete images');
   }
 }
 

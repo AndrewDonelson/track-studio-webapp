@@ -25,11 +25,9 @@ export default function QueuePage() {
   const [clearingAll, setClearingAll] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
-  const [notificationId, setNotificationId] = useState(0);
 
   const showNotification = (type: NotificationType, message: string) => {
-    const id = notificationId;
-    setNotificationId(id + 1);
+    const id = Date.now() + Math.random();
     setNotifications(prev => [...prev, { id, type, message }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));

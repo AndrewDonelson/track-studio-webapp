@@ -527,18 +527,11 @@ export default function VideosGalleryPage() {
                   )}
 
                   <div className="flex gap-2 pt-2">
-                    <Link
-                      href={`/videos/${video.id}`}
-                      className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-center text-sm transition"
-                    >
-                      ▶ Watch
-                    </Link>
-                    
                     {/* Flag Dropdown */}
                     <select
                       value={video.flag || ''}
                       onChange={(e) => handleFlagVideo(video.id, e.target.value || null)}
-                      className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                       title="Flag video issue"
                     >
                       <option value="">🏴 No Flag</option>
