@@ -85,15 +85,25 @@ export default function VideosGalleryPage() {
         };
       });
 
-      // Sort by completion date (newest first)
-      videoItems.sort((a, b) => 
+      // Keep only the latest video for each unique song
+      const uniqueVideos = new Map<number, VideoItem>();
+      videoItems.forEach(video => {
+        const existing = uniqueVideos.get(video.song_id);
+        if (!existing || new Date(video.completed_at) > new Date(existing.completed_at)) {
+          uniqueVideos.set(video.song_id, video);
+        }
+      });
+
+      // Convert to array and sort by completion date (newest first)
+      const uniqueVideoItems = Array.from(uniqueVideos.values());
+      uniqueVideoItems.sort((a, b) => 
         new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
       );
 
-      setVideos(videoItems);
-      setFilteredVideos(videoItems);
-      setDisplayedVideos(videoItems.slice(0, VIDEOS_PER_PAGE));
-      setHasMore(videoItems.length > VIDEOS_PER_PAGE);
+      setVideos(uniqueVideoItems);
+      setFilteredVideos(uniqueVideoItems);
+      setDisplayedVideos(uniqueVideoItems.slice(0, VIDEOS_PER_PAGE));
+      setHasMore(uniqueVideoItems.length > VIDEOS_PER_PAGE);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load videos');
