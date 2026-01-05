@@ -108,6 +108,14 @@ export interface Video {
   artist_name?: string;
 }
 
+export interface Settings {
+  id?: number;
+  master_prompt: string;
+  master_negative_prompt: string;
+  brand_logo_path: string;
+  data_storage_path: string;
+}
+
 class APIClient {
   private baseURL: string;
   private lastHealthCheck: number = 0;
@@ -399,6 +407,28 @@ class APIClient {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete video');
+  }
+
+  // ========== Settings APIs ==========
+  
+  async getSettings(): Promise<Settings> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/settings`);
+    if (!res.ok) throw new Error('Failed to fetch settings');
+    return await res.json();
+  }
+
+  async saveSettings(settings: Settings): Promise<Settings> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/settings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error('Failed to save settings');
+    return await res.json();
   }
 }
 

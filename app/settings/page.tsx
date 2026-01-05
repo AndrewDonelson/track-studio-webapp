@@ -1,0 +1,168 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
+
+interface Settings {
+  id?: number;
+  master_prompt: string;
+  master_negative_prompt: string;
+  brand_logo_path: string;
+  data_storage_path: string;
+}
+
+export default function SettingsPage() {
+  const [settings, setSettings] = useState<Settings>({
+    master_prompt: '',
+    master_negative_prompt: '',
+    brand_logo_path: '',
+    data_storage_path: '~/track-studio-data',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await api.getSettings();
+      if (data && data.id) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api.saveSettings(settings);
+      setMessage({ type: 'success', text: 'Settings saved successfully!' });
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      setMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Settings</h1>
+        <p className="text-gray-400">Configure TrackStudio application settings</p>
+      </div>
+
+      {message && (
+        <div
+          className={`mb-6 p-4 rounded-lg ${
+            message.type === 'success'
+              ? 'bg-green-900/50 border border-green-700 text-green-100'
+              : 'bg-red-900/50 border border-red-700 text-red-100'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div className="bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
+        {/* Master Prompt */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Master Image Prompt
+            <span className="text-gray-400 text-xs ml-2">(Base prompt for all image generation)</span>
+          </label>
+          <textarea
+            value={settings.master_prompt}
+            onChange={(e) => setSettings({ ...settings, master_prompt: e.target.value })}
+            rows={4}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter master prompt for image generation..."
+          />
+        </div>
+
+        {/* Master Negative Prompt */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Master Negative Prompt
+            <span className="text-gray-400 text-xs ml-2">(What to avoid in all images)</span>
+          </label>
+          <textarea
+            value={settings.master_negative_prompt}
+            onChange={(e) => setSettings({ ...settings, master_negative_prompt: e.target.value })}
+            rows={4}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter negative prompt..."
+          />
+        </div>
+
+        {/* Brand Logo Path */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Brand Logo Path
+            <span className="text-gray-400 text-xs ml-2">(Logo displayed in bottom-left of videos)</span>
+          </label>
+          <input
+            type="text"
+            value={settings.brand_logo_path}
+            onChange={(e) => setSettings({ ...settings, brand_logo_path: e.target.value })}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="/path/to/logo.png"
+          />
+        </div>
+
+        {/* Data Storage Path */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Data Storage Path
+            <span className="text-gray-400 text-xs ml-2">(Root directory for all generated files)</span>
+          </label>
+          <input
+            type="text"
+            value={settings.data_storage_path}
+            onChange={(e) => setSettings({ ...settings, data_storage_path: e.target.value })}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="~/track-studio-data"
+          />
+          <p className="mt-2 text-sm text-gray-400">
+            This directory will contain:
+          </p>
+          <ul className="mt-1 text-sm text-gray-500 list-disc list-inside">
+            <li>trackstudio.db (database)</li>
+            <li>images/ (generated images)</li>
+            <li>videos/ (rendered videos)</li>
+            <li>audio/ (mixed audio files)</li>
+            <li>temp/ (temporary files)</li>
+          </ul>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end pt-4">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

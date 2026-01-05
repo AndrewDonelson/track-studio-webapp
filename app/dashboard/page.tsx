@@ -52,12 +52,22 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedError, setSelectedError] = useState<RecentError | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     loadDashboard();
     const interval = setInterval(loadDashboard, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
   }, []);
+
+  const copyToClipboard = async () => {
+    if (selectedError) {
+      await navigator.clipboard.writeText(selectedError.error_message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const loadDashboard = async () => {
     try {
@@ -216,10 +226,14 @@ export default function DashboardPage() {
                 {stats.recent_errors.map((error) => (
                   <div
                     key={error.id}
-                    className="p-3 bg-red-900/20 border border-red-800 rounded"
+                    onClick={() => setSelectedError(error)}
+                    className="p-3 bg-red-900/20 border border-red-800 rounded cursor-pointer hover:bg-red-900/30 transition"
                   >
                     <div className="font-semibold text-red-400">{error.title}</div>
-                    <div className="text-sm text-gray-400 mt-1">{error.error_message}</div>
+                    <div className="text-sm text-gray-400 mt-1 line-clamp-2">
+                      {error.error_message.split('\n')[0].substring(0, 100)}
+                      {error.error_message.length > 100 ? '...' : ''}
+                    </div>
                     <div className="text-xs text-gray-500 mt-1">
                       {new Date(error.failed_at).toLocaleString()}
                     </div>
@@ -231,6 +245,69 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Error Details Dialog */}
+        {selectedError && (
+          <div 
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+            onClick={() => setSelectedError(null)}
+          >
+            <div 
+              className="bg-gray-800 rounded-lg border border-gray-700 max-w-4xl w-full max-h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-gray-700 flex justify-between items-start">
+                <div>
+                  <h3 className="text-2xl font-bold text-red-400 mb-2">Error Details</h3>
+                  <div className="text-lg font-semibold">{selectedError.title}</div>
+                  <div className="text-sm text-gray-400 mt-1">
+                    Failed at: {new Date(selectedError.failed_at).toLocaleString()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedError(null)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none px-2"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="bg-gray-900 rounded p-4 font-mono text-sm whitespace-pre-wrap break-words">
+                  {selectedError.error_message}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-gray-700 flex justify-between">
+                <button
+                  onClick={copyToClipboard}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded transition flex items-center gap-2"
+                >
+                  {copied ? (
+                    <>
+                      <span>✓</span>
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>📋</span>
+                      <span>Copy Error</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSelectedError(null)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

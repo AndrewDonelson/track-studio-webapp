@@ -329,23 +329,42 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     if (!formData.lyrics) return;
 
     const lines = formData.lyrics.split('\n');
-    const formatted: string[] = [];
+    const cleanedLines: string[] = [];
+    let currentParagraph: string[] = [];
 
-    // Simply remove lines starting with [ or (
     for (const line of lines) {
-      const trimmed = line.trim();
+      const stripped = line.trim();
       
-      // Skip lines starting with [ or (
-      if (trimmed.startsWith('[') || trimmed.startsWith('(')) {
+      // Empty lines mark paragraph boundaries
+      if (!stripped) {
+        if (currentParagraph.length > 0) {
+          // Join the paragraph into one continuous line
+          cleanedLines.push(currentParagraph.join(' '));
+          currentParagraph = [];
+        }
+        cleanedLines.push(''); // Keep the paragraph break
         continue;
       }
       
-      // Keep everything else as-is
-      formatted.push(line);
+      // Skip section tags
+      if (stripped.startsWith('[') || stripped.startsWith('(')) {
+        continue;
+      }
+      
+      // Remove trailing commas that cause mid-phrase breaks
+      const cleanedLine = stripped.replace(/,\s*$/, '');
+      
+      // Add to current paragraph
+      currentParagraph.push(cleanedLine);
     }
-
-    // Join lines back together
-    const finalLyrics = formatted.join('\n');
+    
+    // Don't forget the last paragraph
+    if (currentParagraph.length > 0) {
+      cleanedLines.push(currentParagraph.join(' '));
+    }
+    
+    // Join with line breaks and clean up multiple blank lines
+    const finalLyrics = cleanedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
     // Update lyrics_karaoke field
     setFormData(prev => ({
