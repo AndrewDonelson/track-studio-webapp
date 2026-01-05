@@ -38,7 +38,7 @@ export default function NewSongPage() {
     vocals_stem_path: '',
     music_stem_path: '',
     // Karaoke defaults
-    karaoke_font_family: 'Arial',
+    karaoke_font_family: 'Ubuntu',
     karaoke_font_size: 96,
     karaoke_primary_color: '4169E1',
     karaoke_primary_border_color: 'FFFFFF',
@@ -213,83 +213,24 @@ export default function NewSongPage() {
   const formatLyrics = () => {
     if (!formData.lyrics) return;
 
-    let lines = formData.lyrics.split('\n');
+    const lines = formData.lyrics.split('\n');
     const formatted: string[] = [];
 
-    // Step 1 & 2: Remove section labels and bracketed lines
-    lines = lines.filter(line => {
-      const trimmed = line.trim().toLowerCase();
-      // Remove lines starting with section labels
-      if (trimmed.startsWith('verse') || 
-          trimmed.startsWith('chorus') || 
-          trimmed.startsWith('pre-chorus') || 
-          trimmed.startsWith('bridge') || 
-          trimmed.startsWith('intro') || 
-          trimmed.startsWith('outro')) {
-        return false;
-      }
-      // Remove lines starting with [ or (
-      if (trimmed.startsWith('[') || trimmed.startsWith('(')) {
-        return false;
-      }
-      return true;
-    });
-
-    // Step 3: Process each line for length and split if needed
-    for (let line of lines) {
+    // Simply remove lines starting with [ or (
+    for (const line of lines) {
       const trimmed = line.trim();
       
-      if (trimmed.length === 0) {
-        formatted.push('');
+      // Skip lines starting with [ or (
+      if (trimmed.startsWith('[') || trimmed.startsWith('(')) {
         continue;
       }
-
-      if (trimmed.length > 30) {
-        // Look for comma to split line
-        const commaIndex = trimmed.indexOf(',');
-        const middlePoint = Math.floor(trimmed.length / 2);
-        
-        // If there's a comma within reasonable range of middle (±10 chars)
-        if (commaIndex > 0 && Math.abs(commaIndex - middlePoint) <= 10) {
-          // Split at comma
-          const firstPart = trimmed.substring(0, commaIndex).trim();
-          const secondPart = trimmed.substring(commaIndex + 1).trim();
-          
-          // Remove ending punctuation from both parts
-          formatted.push(firstPart.replace(/[.,!?;:]$/, ''));
-          formatted.push(secondPart.replace(/[.,!?;:]$/, ''));
-        } else {
-          // No suitable comma, just remove ending punctuation
-          formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
-        }
-      } else {
-        // Line is fine, just remove ending punctuation
-        formatted.push(trimmed.replace(/[.,!?;:]$/, ''));
-      }
+      
+      // Keep everything else as-is
+      formatted.push(line);
     }
 
-    // Step 4: Ensure paragraphs are separated by single empty line
-    const paragraphs: string[] = [];
-    let currentParagraph: string[] = [];
-    
-    for (const line of formatted) {
-      if (line === '') {
-        if (currentParagraph.length > 0) {
-          paragraphs.push(currentParagraph.join('\n'));
-          currentParagraph = [];
-        }
-      } else {
-        currentParagraph.push(line);
-      }
-    }
-    
-    // Add last paragraph if exists
-    if (currentParagraph.length > 0) {
-      paragraphs.push(currentParagraph.join('\n'));
-    }
-
-    // Step 5: Join paragraphs with single empty line
-    const finalLyrics = paragraphs.join('\n\n');
+    // Join lines back together
+    const finalLyrics = formatted.join('\n');
 
     // Update lyrics_karaoke field
     setFormData(prev => ({

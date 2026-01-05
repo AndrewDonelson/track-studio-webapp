@@ -48,16 +48,16 @@ export default function SongsPage() {
 
   const loadCompletedVideos = async () => {
     try {
-      const queue = await api.getQueue();
-      const videos: Record<number, string> = {};
-      queue.forEach(item => {
-        if (item.status === 'completed' && item.video_file_path) {
+      const videos = await api.getAllVideos();
+      const videoMap: Record<number, string> = {};
+      videos.forEach(video => {
+        if (video.status === 'completed' && video.video_file_path) {
           // Extract just the filename from the full path
-          const filename = item.video_file_path.split('/').pop() || '';
-          videos[item.song_id] = filename;
+          const filename = video.video_file_path.split('/').pop() || '';
+          videoMap[video.song_id] = filename;
         }
       });
-      setVideoMap(videos);
+      setVideoMap(videoMap);
     } catch (err) {
       console.error('Failed to load video paths:', err);
     }

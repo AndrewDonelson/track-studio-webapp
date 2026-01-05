@@ -485,9 +485,10 @@ export default function VideosGalleryPage() {
                       <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent ml-1" />
                     </div>
                   </div>
-                  {video.duration > 0 && (
-                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/80 rounded text-xs font-medium">
-                      {formatDuration(video.duration)}
+                  {/* Duration Badge */}
+                  {video.duration_seconds > 0 && (
+                    <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs">
+                      {formatDuration(video.duration_seconds)}
                     </div>
                   )}
                 </Link>
@@ -502,7 +503,7 @@ export default function VideosGalleryPage() {
                   <p className="text-gray-400 text-sm">{video.artist}</p>
                   
                   <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{formatDate(video.completed_at)}</span>
+                    <span>{formatDate(video.rendered_at)}</span>
                     <div className="flex gap-2">
                       {video.bpm > 0 && (
                         <span className="px-2 py-1 bg-gray-700 rounded">
