@@ -505,7 +505,7 @@ export default function VideosGalleryPage() {
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span>{formatDate(video.rendered_at)}</span>
                     <div className="flex gap-2">
-                      {video.bpm > 0 && (
+                      {video.bpm && video.bpm > 0 && (
                         <span className="px-2 py-1 bg-gray-700 rounded">
                           {video.bpm.toFixed(0)} BPM
                         </span>

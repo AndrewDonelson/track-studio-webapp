@@ -57,9 +57,9 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
         video_file_path: filename,
         thumbnail_path: videoData.thumbnail_path,
         duration: videoData.duration_seconds || 0,
-        bpm: videoData.bpm,
-        key: videoData.key,
-        tempo: videoData.tempo,
+        bpm: videoData.bpm ?? null,
+        key: videoData.key ?? null,
+        tempo: videoData.tempo ?? null,
         rendered_at: videoData.rendered_at,
         file_size: videoData.file_size_bytes,
         resolution: videoData.resolution

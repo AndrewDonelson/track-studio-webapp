@@ -4,7 +4,7 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, Song, GeneratedImage, SongMetadataEnrichment } from '@/lib/api';
 
-type NotificationType = 'success' | 'error' | 'info';
+type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
 interface Notification {
   id: number;
