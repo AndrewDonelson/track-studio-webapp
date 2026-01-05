@@ -7,27 +7,26 @@ import { api } from '@/lib/api';
 import { formatDuration } from '@/lib/utils';
 
 interface VideoDetails {
-  queue_id: number;
+  video_id: number;
   song_id: number;
   title: string;
   artist: string;
-  genre: string;
-  lyrics: string;
+  genre: string | null;
   video_file_path: string;
-  thumbnail_path: string;
+  thumbnail_path: string | null;
   duration: number;
-  bpm: number;
-  key: string;
-  tempo: string;
-  completed_at: string;
-  processing_time: string; // Changed from number to string for formatted duration
+  bpm: number | null;
+  key: string | null;
+  tempo: string | null;
+  rendered_at: string;
   file_size: number;
+  resolution: string;
 }
 
 export default function VideoPlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
-  const queueId = parseInt(id);
+  const videoId = parseInt(id);
   
   const [video, setVideo] = useState<VideoDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,48 +34,35 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     loadVideo();
-  }, [queueId]);
+  }, [videoId]);
 
   const loadVideo = async () => {
     try {
       setLoading(true);
-      const [queueItem, allSongs] = await Promise.all([
-        api.getQueueItem(queueId),
-        api.getSongs()
-      ]);
-
-      const song = allSongs.find((s) => s.id === queueItem.song_id);
+      const allVideos = await api.getAllVideos();
+      const videoData = allVideos.find((v) => v.id === videoId);
       
-      if (!song) {
-        throw new Error('Song not found');
+      if (!videoData) {
+        throw new Error('Video not found');
       }
 
-      const filename = queueItem.video_file_path.split('/').pop() || '';
-      
-      // Calculate processing time
-      let processingTimeFormatted = '0s';
-      if (queueItem.started_at && queueItem.completed_at) {
-        const start = new Date(queueItem.started_at).getTime();
-        const end = new Date(queueItem.completed_at).getTime();
-        processingTimeFormatted = formatDuration(Math.round((end - start) / 1000));
-      }
+      const filename = videoData.video_file_path.split('/').pop() || '';
 
       setVideo({
-        queue_id: queueItem.id,
-        song_id: song.id,
-        title: song.title,
-        artist: song.artist_name,
-        genre: song.genre,
-        lyrics: song.lyrics,
+        video_id: videoData.id,
+        song_id: videoData.song_id,
+        title: videoData.song_title || `Song ${videoData.song_id}`,
+        artist: videoData.artist_name || 'Unknown Artist',
+        genre: videoData.genre || null,
         video_file_path: filename,
-        thumbnail_path: queueItem.thumbnail_path || '',
-        duration: song.duration_seconds,
-        bpm: song.bpm,
-        key: song.key,
-        tempo: song.tempo,
-        completed_at: queueItem.completed_at || '',
-        processing_time: processingTimeFormatted,
-        file_size: queueItem.video_file_size || 0
+        thumbnail_path: videoData.thumbnail_path,
+        duration: videoData.duration_seconds || 0,
+        bpm: videoData.bpm,
+        key: videoData.key,
+        tempo: videoData.tempo,
+        rendered_at: videoData.rendered_at,
+        file_size: videoData.file_size_bytes,
+        resolution: videoData.resolution
       });
       
       setError(null);
@@ -183,16 +169,6 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
               </button>
             </div>
           </div>
-
-          {/* Lyrics */}
-          {video.lyrics && (
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Lyrics</h2>
-              <div className="text-gray-300 whitespace-pre-wrap font-mono text-sm max-h-96 overflow-y-auto">
-                {video.lyrics}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Sidebar - Stats */}
@@ -207,7 +183,7 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
               </div>
               <div>
                 <div className="text-sm text-gray-400">BPM</div>
-                <div className="text-2xl font-bold">{video.bpm > 0 ? video.bpm.toFixed(1) : 'N/A'}</div>
+                <div className="text-2xl font-bold">{video.bpm && video.bpm > 0 ? video.bpm.toFixed(1) : 'N/A'}</div>
               </div>
               <div>
                 <div className="text-sm text-gray-400">Key</div>
@@ -222,25 +198,25 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
 
           {/* Rendering Info */}
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">Rendering Info</h2>
+            <h2 className="text-lg font-semibold mb-4">Video Info</h2>
             <div className="space-y-3 text-sm">
+              <div>
+                <div className="text-gray-400">Resolution</div>
+                <div className="font-medium">{video.resolution.toUpperCase()}</div>
+              </div>
               <div>
                 <div className="text-gray-400">File Size</div>
                 <div className="font-medium">{formatFileSize(video.file_size)}</div>
               </div>
               <div>
-                <div className="text-gray-400">Processing Time</div>
-                <div className="font-medium">{video.processing_time}</div>
-              </div>
-              <div>
-                <div className="text-gray-400">Completed</div>
+                <div className="text-gray-400">Rendered</div>
                 <div className="font-medium">
-                  {new Date(video.completed_at).toLocaleString()}
+                  {new Date(video.rendered_at).toLocaleString()}
                 </div>
               </div>
               <div>
-                <div className="text-gray-400">Queue ID</div>
-                <div className="font-medium">#{video.queue_id}</div>
+                <div className="text-gray-400">Video ID</div>
+                <div className="font-medium">#{video.video_id}</div>
               </div>
               <div>
                 <div className="text-gray-400">Song ID</div>

@@ -84,6 +84,30 @@ export interface GeneratedImage {
   created_at: string;
 }
 
+export interface Video {
+  id: number;
+  song_id: number;
+  video_file_path: string;
+  thumbnail_path: string | null;
+  resolution: string;
+  duration_seconds: number | null;
+  file_size_bytes: number;
+  fps: number;
+  background_style: string | null;
+  spectrum_color: string | null;
+  has_karaoke: boolean;
+  status: string;
+  rendered_at: string;
+  created_at: string;
+  genre?: string | null;
+  bpm?: number | null;
+  key?: string | null;
+  tempo?: string | null;
+  flag?: string | null;
+  song_title?: string;
+  artist_name?: string;
+}
+
 class APIClient {
   private baseURL: string;
   private lastHealthCheck: number = 0;
@@ -351,6 +375,30 @@ class APIClient {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete images');
+  }
+
+  // ========== Videos APIs ==========
+  
+  async getAllVideos(): Promise<Video[]> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/videos`);
+    if (!res.ok) throw new Error('Failed to fetch videos');
+    return await res.json();
+  }
+
+  async getVideosBySong(songId: number): Promise<Video[]> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/videos/song/${songId}`);
+    if (!res.ok) throw new Error('Failed to fetch videos for song');
+    return await res.json();
+  }
+
+  async deleteVideo(id: number): Promise<void> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/videos/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete video');
   }
 }
 

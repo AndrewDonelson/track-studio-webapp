@@ -9,15 +9,19 @@ interface VideoItem {
   song_id: number;
   title: string;
   artist: string;
-  genre: string;
   video_file_path: string;
-  thumbnail_path: string;
-  duration: number;
-  bpm: number;
-  key: string;
-  tempo: string;
-  flag: string | null;
-  completed_at: string;
+  thumbnail_path: string | null;
+  resolution: string;
+  duration_seconds: number;
+  file_size_bytes: number;
+  rendered_at: string;
+  genre?: string | null;
+  bpm?: number | null;
+  key?: string | null;
+  tempo?: string | null;
+  flag?: string | null;
+  song_title?: string;
+  artist_name?: string;
 }
 
 export default function VideosGalleryPage() {
@@ -53,57 +57,42 @@ export default function VideosGalleryPage() {
   const loadVideos = async () => {
     try {
       setLoading(true);
-      const [queueData, songsData] = await Promise.all([
-        api.getQueue(),
-        api.getSongs()
-      ]);
+      const videosData = await api.getAllVideos();
 
-      // Get completed queue items with video files
-      const completedQueue = queueData.filter(
-        (item) => item.status === 'completed' && item.video_file_path
-      );
-
-      // Map to video items with song details
-      const videoItems: VideoItem[] = completedQueue.map((qItem) => {
-        const song = songsData.find((s) => s.id === qItem.song_id);
-        const filename = qItem.video_file_path.split('/').pop() || '';
+      // Map to video items
+      const videoItems: VideoItem[] = videosData.map((video) => {
+        const filename = video.video_file_path.split('/').pop() || '';
         
         return {
-          id: qItem.id,
-          song_id: qItem.song_id,
-          title: song?.title || `Song ${qItem.song_id}`,
-          artist: song?.artist_name || 'Unknown Artist',
-          genre: song?.genre || '',
+          id: video.id,
+          song_id: video.song_id,
+          title: video.song_title || `Song ${video.song_id}`,
+          artist: video.artist_name || 'Unknown Artist',
           video_file_path: filename,
-          thumbnail_path: qItem.thumbnail_path || '',
-          duration: song?.duration_seconds || 0,
-          bpm: song?.bpm || 0,
-          key: song?.key || '',
-          tempo: song?.tempo || '',
-          flag: qItem.flag || null,
-          completed_at: qItem.completed_at || ''
+          thumbnail_path: video.thumbnail_path,
+          resolution: video.resolution,
+          duration_seconds: video.duration_seconds || 0,
+          file_size_bytes: video.file_size_bytes,
+          rendered_at: video.rendered_at,
+          genre: video.genre,
+          bpm: video.bpm,
+          key: video.key,
+          tempo: video.tempo,
+          flag: video.flag,
+          song_title: video.song_title,
+          artist_name: video.artist_name
         };
       });
 
-      // Keep only the latest video for each unique song
-      const uniqueVideos = new Map<number, VideoItem>();
-      videoItems.forEach(video => {
-        const existing = uniqueVideos.get(video.song_id);
-        if (!existing || new Date(video.completed_at) > new Date(existing.completed_at)) {
-          uniqueVideos.set(video.song_id, video);
-        }
-      });
-
-      // Convert to array and sort by completion date (newest first)
-      const uniqueVideoItems = Array.from(uniqueVideos.values());
-      uniqueVideoItems.sort((a, b) => 
-        new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+      // Sort by rendered date (newest first)
+      videoItems.sort((a, b) => 
+        new Date(b.rendered_at).getTime() - new Date(a.rendered_at).getTime()
       );
 
-      setVideos(uniqueVideoItems);
-      setFilteredVideos(uniqueVideoItems);
-      setDisplayedVideos(uniqueVideoItems.slice(0, VIDEOS_PER_PAGE));
-      setHasMore(uniqueVideoItems.length > VIDEOS_PER_PAGE);
+      setVideos(videoItems);
+      setFilteredVideos(videoItems);
+      setDisplayedVideos(videoItems.slice(0, VIDEOS_PER_PAGE));
+      setHasMore(videoItems.length > VIDEOS_PER_PAGE);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load videos');
@@ -143,10 +132,11 @@ export default function VideosGalleryPage() {
     // Tempo filter
     if (tempoFilter !== 'all') {
       filtered = filtered.filter(video => {
-        if (tempoFilter === 'slow') return video.bpm > 0 && video.bpm < 90;
-        if (tempoFilter === 'medium') return video.bpm >= 90 && video.bpm < 120;
-        if (tempoFilter === 'fast') return video.bpm >= 120 && video.bpm < 150;
-        if (tempoFilter === 'very-fast') return video.bpm >= 150;
+        const videoBpm = video.bpm || 0;
+        if (tempoFilter === 'slow') return videoBpm > 0 && videoBpm < 90;
+        if (tempoFilter === 'medium') return videoBpm >= 90 && videoBpm < 120;
+        if (tempoFilter === 'fast') return videoBpm >= 120 && videoBpm < 150;
+        if (tempoFilter === 'very-fast') return videoBpm >= 150;
         return true;
       });
     }
@@ -176,9 +166,9 @@ export default function VideosGalleryPage() {
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime();
+          return new Date(b.rendered_at).getTime() - new Date(a.rendered_at).getTime();
         case 'oldest':
-          return new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime();
+          return new Date(a.rendered_at).getTime() - new Date(b.rendered_at).getTime();
         case 'title-asc':
           return a.title.localeCompare(b.title);
         case 'title-desc':
