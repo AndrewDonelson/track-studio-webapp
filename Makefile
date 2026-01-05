@@ -75,7 +75,7 @@ deploy-mule: build
 	@echo "$(COLOR_BLUE)→ Checking Node.js installation...$(COLOR_RESET)"
 	@ssh $(MULE_HOST) "command -v node >/dev/null 2>&1 || (echo 'Installing Node.js...'; curl -fsSL https://deb.nodesource.com/setup_20.x | echo '$(SUDO_PASS)' | sudo -S bash - && echo '$(SUDO_PASS)' | sudo -S apt-get install -y nodejs)" || true
 	@echo "$(COLOR_BLUE)→ Stopping existing webapp...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "pkill -f 'next start' 2>/dev/null || true"
+	-@ssh $(MULE_HOST) "pkill -f 'next start'" 2>/dev/null || true
 	@sleep 1
 	@echo "$(COLOR_BLUE)→ Creating directories...$(COLOR_RESET)"
 	@ssh $(MULE_HOST) "mkdir -p $(MULE_PATH)"
