@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { api, QueueItem, ProgressEvent } from '@/lib/api';
+import { formatDuration } from '@/lib/utils';
 
 type NotificationType = 'success' | 'error' | 'info';
 
@@ -20,7 +21,20 @@ export default function QueuePage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [progressMap, setProgressMap] = useState<Record<number, ProgressEvent>>({});
+  const [progressMap, setProgressMap] = useState<Record<number, ProgressEvent>>(() => {
+    // Load progress from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('queue_progress');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          return {};
+        }
+      }
+    }
+    return {};
+  });
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -38,6 +52,13 @@ export default function QueuePage() {
     setConfirmDialog({ message, onConfirm });
   };
 
+  // Save progress to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('queue_progress', JSON.stringify(progressMap));
+    }
+  }, [progressMap]);
+
   useEffect(() => {
     loadQueue();
     const interval = setInterval(loadQueue, 5000); // Refresh every 5 seconds
@@ -52,6 +73,14 @@ export default function QueuePage() {
       // Refresh queue when a job completes
       if (event.status === 'completed' || event.status === 'failed') {
         loadQueue();
+        // Clean up completed jobs from progress map after a delay
+        setTimeout(() => {
+          setProgressMap(prev => {
+            const next = { ...prev };
+            delete next[event.queue_id];
+            return next;
+          });
+        }, 10000);
       }
     });
 
@@ -352,9 +381,11 @@ export default function QueuePage() {
                 {item.started_at && item.completed_at && (
                   <div className="text-sm text-gray-500">
                     Processing time: {' '}
-                    {Math.round(
-                      (new Date(item.completed_at).getTime() - new Date(item.started_at).getTime()) / 1000
-                    )}s
+                    {formatDuration(
+                      Math.round(
+                        (new Date(item.completed_at).getTime() - new Date(item.started_at).getTime()) / 1000
+                      )
+                    )}
                   </div>
                 )}
               </div>

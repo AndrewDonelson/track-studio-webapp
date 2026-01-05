@@ -4,6 +4,7 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatDuration } from '@/lib/utils';
 
 interface VideoDetails {
   queue_id: number;
@@ -19,7 +20,7 @@ interface VideoDetails {
   key: string;
   tempo: string;
   completed_at: string;
-  processing_time: number;
+  processing_time: string; // Changed from number to string for formatted duration
   file_size: number;
 }
 
@@ -53,11 +54,11 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
       const filename = queueItem.video_file_path.split('/').pop() || '';
       
       // Calculate processing time
-      let processingTime = 0;
+      let processingTimeFormatted = '0s';
       if (queueItem.started_at && queueItem.completed_at) {
         const start = new Date(queueItem.started_at).getTime();
         const end = new Date(queueItem.completed_at).getTime();
-        processingTime = Math.round((end - start) / 1000);
+        processingTimeFormatted = formatDuration(Math.round((end - start) / 1000));
       }
 
       setVideo({
@@ -74,7 +75,7 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
         key: song.key,
         tempo: song.tempo,
         completed_at: queueItem.completed_at || '',
-        processing_time: processingTime,
+        processing_time: processingTimeFormatted,
         file_size: queueItem.video_file_size || 0
       });
       
@@ -229,7 +230,7 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
               </div>
               <div>
                 <div className="text-gray-400">Processing Time</div>
-                <div className="font-medium">{formatDuration(video.processing_time)}</div>
+                <div className="font-medium">{video.processing_time}</div>
               </div>
               <div>
                 <div className="text-gray-400">Completed</div>

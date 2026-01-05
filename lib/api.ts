@@ -28,6 +28,17 @@ export interface Song {
   spectrum_opacity: number;
   target_resolution: string;
   show_metadata: boolean;
+  
+  // Karaoke customization
+  karaoke_font_family?: string;
+  karaoke_font_size?: number;
+  karaoke_primary_color?: string;
+  karaoke_primary_border_color?: string;
+  karaoke_highlight_color?: string;
+  karaoke_highlight_border_color?: string;
+  karaoke_alignment?: number;
+  karaoke_margin_bottom?: number;
+  
   created_at: string;
   updated_at: string;
 }

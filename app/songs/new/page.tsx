@@ -37,7 +37,32 @@ export default function NewSongPage() {
     spectrum_opacity: 0.5,
     vocals_stem_path: '',
     music_stem_path: '',
+    // Karaoke defaults
+    karaoke_font_family: 'Arial',
+    karaoke_font_size: 96,
+    karaoke_primary_color: '4169E1',
+    karaoke_primary_border_color: 'FFFFFF',
+    karaoke_highlight_color: 'FFD700',
+    karaoke_highlight_border_color: 'FFFFFF',
+    karaoke_alignment: 5,
+    karaoke_margin_bottom: 0,
   });
+
+  // Load Google Font dynamically when font family changes
+  useEffect(() => {
+    if (formData.karaoke_font_family && formData.karaoke_font_family !== 'Arial') {
+      const fontName = formData.karaoke_font_family.replace(/ /g, '+');
+      const link = document.createElement('link');
+      link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@400;700&display=swap`;
+      link.rel = 'stylesheet';
+      document.head.appendChild(link);
+      
+      return () => {
+        // Cleanup: remove the link when component unmounts or font changes
+        document.head.removeChild(link);
+      };
+    }
+  }, [formData.karaoke_font_family]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -181,7 +206,7 @@ export default function NewSongPage() {
     
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value,
+      [name]: (type === 'number' || type === 'range') ? parseFloat(value) || 0 : value,
     }));
   };
 
@@ -517,6 +542,253 @@ export default function NewSongPage() {
             <p className="text-gray-500 text-sm mt-2">
               Line count: {(formData.lyrics_karaoke || '').split('\n').length}
             </p>
+          </div>
+        </div>
+
+        {/* Karaoke Settings */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-4">
+          <h2 className="text-xl font-semibold mb-4">Karaoke Text Settings</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            Customize the appearance of karaoke lyrics in the video
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Font Family */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Font Family</label>
+              <select
+                name="karaoke_font_family"
+                value={formData.karaoke_font_family || 'Arial'}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value="Roboto">Roboto</option>
+                <option value="Open Sans">Open Sans</option>
+                <option value="Lato">Lato</option>
+                <option value="Montserrat">Montserrat</option>
+                <option value="Oswald">Oswald</option>
+                <option value="Raleway">Raleway</option>
+                <option value="Poppins">Poppins</option>
+                <option value="Ubuntu">Ubuntu</option>
+                <option value="Bebas Neue">Bebas Neue</option>
+                <option value="Nunito">Nunito</option>
+                <option value="Playfair Display">Playfair Display</option>
+                <option value="Merriweather">Merriweather</option>
+                <option value="PT Sans">PT Sans</option>
+                <option value="Source Sans Pro">Source Sans Pro</option>
+                <option value="Noto Sans">Noto Sans</option>
+                <option value="Inter">Inter</option>
+                <option value="Work Sans">Work Sans</option>
+                <option value="Quicksand">Quicksand</option>
+                <option value="Anton">Anton</option>
+                <option value="Bitter">Bitter</option>
+                <option value="Archivo">Archivo</option>
+                <option value="Karla">Karla</option>
+                <option value="Titillium Web">Titillium Web</option>
+                <option value="Arimo">Arimo</option>
+                <option value="Arial">Arial</option>
+              </select>
+            </div>
+
+            {/* Font Size */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Font Size: {formData.karaoke_font_size || 96}px
+              </label>
+              <input
+                type="range"
+                name="karaoke_font_size"
+                min="48"
+                max="200"
+                step="4"
+                value={formData.karaoke_font_size || 96}
+                onChange={handleChange}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>48px</span>
+                <span>200px</span>
+              </div>
+            </div>
+
+            {/* Primary Color */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Primary Text Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={`#${formData.karaoke_primary_color || '4169E1'}`}
+                  onChange={(e) => {
+                    const hex = e.target.value.replace('#', '');
+                    setFormData(prev => ({ ...prev, karaoke_primary_color: hex }));
+                  }}
+                  className="w-16 h-10 rounded border border-gray-700 cursor-pointer bg-gray-900"
+                />
+                <input
+                  type="text"
+                  name="karaoke_primary_color"
+                  value={formData.karaoke_primary_color || '4169E1'}
+                  onChange={handleChange}
+                  placeholder="4169E1 (Royal Blue)"
+                  maxLength={6}
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono uppercase"
+                />
+              </div>
+            </div>
+
+            {/* Primary Border Color */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Primary Border Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={`#${formData.karaoke_primary_border_color || 'FFFFFF'}`}
+                  onChange={(e) => {
+                    const hex = e.target.value.replace('#', '');
+                    setFormData(prev => ({ ...prev, karaoke_primary_border_color: hex }));
+                  }}
+                  className="w-16 h-10 rounded border border-gray-700 cursor-pointer bg-gray-900"
+                />
+                <input
+                  type="text"
+                  name="karaoke_primary_border_color"
+                  value={formData.karaoke_primary_border_color || 'FFFFFF'}
+                  onChange={handleChange}
+                  placeholder="FFFFFF (White)"
+                  maxLength={6}
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono uppercase"
+                />
+              </div>
+            </div>
+
+            {/* Highlight Color */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Highlight (Active) Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={`#${formData.karaoke_highlight_color || 'FFD700'}`}
+                  onChange={(e) => {
+                    const hex = e.target.value.replace('#', '');
+                    setFormData(prev => ({ ...prev, karaoke_highlight_color: hex }));
+                  }}
+                  className="w-16 h-10 rounded border border-gray-700 cursor-pointer bg-gray-900"
+                />
+                <input
+                  type="text"
+                  name="karaoke_highlight_color"
+                  value={formData.karaoke_highlight_color || 'FFD700'}
+                  onChange={handleChange}
+                  placeholder="FFD700 (Gold)"
+                  maxLength={6}
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono uppercase"
+                />
+              </div>
+            </div>
+
+            {/* Highlight Border Color */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Highlight Border Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={`#${formData.karaoke_highlight_border_color || 'FFFFFF'}`}
+                  onChange={(e) => {
+                    const hex = e.target.value.replace('#', '');
+                    setFormData(prev => ({ ...prev, karaoke_highlight_border_color: hex }));
+                  }}
+                  className="w-16 h-10 rounded border border-gray-700 cursor-pointer bg-gray-900"
+                />
+                <input
+                  type="text"
+                  name="karaoke_highlight_border_color"
+                  value={formData.karaoke_highlight_border_color || 'FFFFFF'}
+                  onChange={handleChange}
+                  placeholder="FFFFFF (White)"
+                  maxLength={6}
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500 font-mono uppercase"
+                />
+              </div>
+            </div>
+
+            {/* Alignment */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Text Alignment</label>
+              <select
+                name="karaoke_alignment"
+                value={formData.karaoke_alignment || 5}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value={5}>Center</option>
+                <option value={2}>Bottom Center</option>
+                <option value={8}>Top Center</option>
+              </select>
+            </div>
+
+            {/* Margin Bottom */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Vertical Offset: {formData.karaoke_margin_bottom ?? 0}px
+              </label>
+              <input
+                type="range"
+                name="karaoke_margin_bottom"
+                min="-200"
+                max="200"
+                step="10"
+                value={formData.karaoke_margin_bottom ?? 0}
+                onChange={handleChange}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>-200px (Up)</span>
+                <span>0px</span>
+                <span>+200px (Down)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div className="mt-6 bg-gray-900 border border-gray-700 rounded-lg p-8 flex items-end justify-center min-h-[200px]">
+            <div 
+              className="text-center"
+              style={{ 
+                fontFamily: formData.karaoke_font_family || 'Arial',
+                fontSize: `${formData.karaoke_font_size || 96}px`,
+                lineHeight: 1.2,
+              }}
+            >
+              <span
+                style={{
+                  color: `#${formData.karaoke_highlight_color || 'FFD700'}`,
+                  textShadow: `
+                    -2px -2px 0 #${formData.karaoke_highlight_border_color || 'FFFFFF'},
+                    2px -2px 0 #${formData.karaoke_highlight_border_color || 'FFFFFF'},
+                    -2px 2px 0 #${formData.karaoke_highlight_border_color || 'FFFFFF'},
+                    2px 2px 0 #${formData.karaoke_highlight_border_color || 'FFFFFF'}
+                  `,
+                  fontWeight: 'bold'
+                }}
+              >
+                This is your
+              </span>
+              {' '}
+              <span
+                style={{
+                  color: `#${formData.karaoke_primary_color || '4169E1'}`,
+                  textShadow: `
+                    -2px -2px 0 #${formData.karaoke_primary_border_color || 'FFFFFF'},
+                    2px -2px 0 #${formData.karaoke_primary_border_color || 'FFFFFF'},
+                    -2px 2px 0 #${formData.karaoke_primary_border_color || 'FFFFFF'},
+                    2px 2px 0 #${formData.karaoke_primary_border_color || 'FFFFFF'}
+                  `,
+                  fontWeight: 'bold'
+                }}
+              >
+                karaoke lyrics
+              </span>
+            </div>
           </div>
         </div>
 
