@@ -9,6 +9,7 @@ VERSION := 0.1.0
 MULE_HOST := andrew@192.168.1.200
 MULE_PATH := /home/andrew/trackstudio/webapp
 WEBAPP_PORT := 3000
+SUDO_PASS := yy1660277
 
 # Colors for output
 COLOR_RESET := \033[0m
@@ -72,7 +73,7 @@ clean:
 deploy-mule: build
 	@echo "$(COLOR_GREEN)Deploying webapp to $(MULE_HOST)...$(COLOR_RESET)"
 	@echo "$(COLOR_BLUE)→ Checking Node.js installation...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "command -v node >/dev/null 2>&1 || (echo 'Installing Node.js...'; curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs)" || true
+	@ssh $(MULE_HOST) "command -v node >/dev/null 2>&1 || (echo 'Installing Node.js...'; curl -fsSL https://deb.nodesource.com/setup_20.x | echo '$(SUDO_PASS)' | sudo -S bash - && echo '$(SUDO_PASS)' | sudo -S apt-get install -y nodejs)" || true
 	@echo "$(COLOR_BLUE)→ Stopping existing webapp...$(COLOR_RESET)"
 	@ssh $(MULE_HOST) "pkill -f 'next start' || true"
 	@sleep 1
