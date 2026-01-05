@@ -20,6 +20,8 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -30,7 +32,15 @@ export default function SettingsPage() {
     try {
       const data = await api.getSettings();
       if (data && data.id) {
-        setSettings(data);
+        // Set default master prompts if empty
+        const updatedData = { ...data };
+        if (!updatedData.master_prompt) {
+          updatedData.master_prompt = `Cinematic photography, professional composition, photorealistic, ultra detailed, sharp focus, dramatic lighting, rich colors, depth of field, rule of thirds, 8K resolution, high-end camera quality, film grain texture, perfect exposure, color grading, natural skin tones, atmospheric mood, dynamic range, professional color correction, bokeh effect, pristine image quality`;
+        }
+        if (!updatedData.master_negative_prompt) {
+          updatedData.master_negative_prompt = `text, letters, words, numbers, digits, symbols, typography, watermark, signature, logo, brand names, writing, captions, subtitles, titles, labels, tags, readable signs, store names, street signs, billboards, posters with text, written language, calligraphy, handwriting, printed text, ui elements, overlays, credit, copyright notice, alphabet characters, ugly, blurry, low quality, distorted, deformed, disfigured, cartoon, anime, CGI, artificial, fake, amateur, pixelated, grainy, noisy, oversaturated, undersaturated, washed out, glitch, artifacts`;
+        }
+        setSettings(updatedData);
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -51,6 +61,35 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUploadLogo = async () => {
+    if (!logoFile) return;
+
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+
+      const response = await fetch('http://localhost:8080/api/v1/settings/upload-logo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const result = await response.json();
+      setSettings({ ...settings, brand_logo_path: result.path });
+      setLogoFile(null);
+      setMessage({ type: 'success', text: 'Logo uploaded successfully!' });
+    } catch (error) {
+      console.error('Failed to upload logo:', error);
+      setMessage({ type: 'error', text: 'Failed to upload logo. Please try again.' });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -112,19 +151,44 @@ export default function SettingsPage() {
           />
         </div>
 
-        {/* Brand Logo Path */}
+        {/* Brand Logo */}
         <div>
           <label className="block text-sm font-medium mb-2">
-            Brand Logo Path
-            <span className="text-gray-400 text-xs ml-2">(Logo displayed in bottom-left of videos)</span>
+            Brand Logo
+            <span className="text-gray-400 text-xs ml-2">(Logo displayed in bottom-right of videos)</span>
           </label>
-          <input
-            type="text"
-            value={settings.brand_logo_path}
-            onChange={(e) => setSettings({ ...settings, brand_logo_path: e.target.value })}
-            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="/path/to/logo.png"
-          />
+          <div className="space-y-3">
+            {settings.brand_logo_path && (
+              <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-lg border border-gray-700">
+                <img
+                  src={`http://localhost:8080/${settings.brand_logo_path}`}
+                  alt="Brand Logo"
+                  className="w-16 h-16 object-contain bg-white rounded"
+                />
+                <div className="flex-1">
+                  <div className="text-sm text-gray-400">Current Logo</div>
+                  <div className="text-xs text-gray-500">{settings.brand_logo_path}</div>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={handleUploadLogo}
+                disabled={!logoFile || uploading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
+              >
+                {uploading ? 'Uploading...' : 'Upload Logo'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Upload PNG or JPG logo (recommended: 150x150px or larger, square aspect ratio)</p>
+          </div>
         </div>
 
         {/* Data Storage Path */}

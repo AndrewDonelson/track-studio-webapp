@@ -28,6 +28,7 @@ export default function SongsPage() {
   const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [audioValidation, setAudioValidation] = useState<Record<number, { hasVocals: boolean; hasMusic: boolean }>>({});
 
   const showNotification = (type: NotificationType, message: string) => {
     const id = Date.now() + Math.random();
@@ -45,6 +46,28 @@ export default function SongsPage() {
     loadSongs();
     loadCompletedVideos();
   }, []);
+
+  const loadAudioValidation = async (songIds: number[]) => {
+    const validationMap: Record<number, { hasVocals: boolean; hasMusic: boolean }> = {};
+    
+    // Validate each song's audio files
+    await Promise.all(
+      songIds.map(async (songId) => {
+        try {
+          const validation = await api.validateAudioPaths(songId);
+          validationMap[songId] = {
+            hasVocals: !!validation.vocals_ok,
+            hasMusic: !!validation.music_ok
+          };
+        } catch (err) {
+          // If validation fails, assume no files
+          validationMap[songId] = { hasVocals: false, hasMusic: false };
+        }
+      })
+    );
+    
+    setAudioValidation(validationMap);
+  };
 
   const loadCompletedVideos = async () => {
     try {
@@ -88,6 +111,11 @@ export default function SongsPage() {
       
       setSongs(uniqueSongs);
       setError(null);
+      
+      // Load audio validation for all songs
+      if (uniqueSongs.length > 0) {
+        loadAudioValidation(uniqueSongs.map(s => s.id));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load songs');
     } finally {
@@ -124,8 +152,9 @@ export default function SongsPage() {
   };
 
   const hasAudio = (song: Song) => {
-    return (song.vocals_stem_path && song.vocals_stem_path.length > 0) || 
-           (song.music_stem_path && song.music_stem_path.length > 0);
+    const validation = audioValidation[song.id];
+    if (!validation) return false;
+    return validation.hasVocals || validation.hasMusic;
   };
 
   const isComplete = (song: Song) => {
@@ -315,11 +344,11 @@ export default function SongsPage() {
 
               {/* File Status */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4 text-xs">
-                <div className={`p-2 rounded ${song.vocals_stem_path ? 'bg-green-900/20 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
-                  {song.vocals_stem_path ? '✓ Vocals' : '✗ No vocals'}
+                <div className={`p-2 rounded ${audioValidation[song.id]?.hasVocals ? 'bg-green-900/20 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
+                  {audioValidation[song.id]?.hasVocals ? '✓ Vocals' : '✗ No vocals'}
                 </div>
-                <div className={`p-2 rounded ${song.music_stem_path ? 'bg-green-900/20 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
-                  {song.music_stem_path ? '✓ Music' : '✗ No music'}
+                <div className={`p-2 rounded ${audioValidation[song.id]?.hasMusic ? 'bg-green-900/20 text-green-400' : 'bg-gray-700 text-gray-500'}`}>
+                  {audioValidation[song.id]?.hasMusic ? '✓ Music' : '✗ No music'}
                 </div>
                 <div className={`p-2 rounded ${isComplete(song) ? 'bg-blue-900/20 text-blue-400 font-semibold' : 'bg-gray-700 text-gray-500'}`}>
                   {isComplete(song) ? '✓ Video Ready' : '○ Not rendered'}

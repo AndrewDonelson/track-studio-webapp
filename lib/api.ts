@@ -11,6 +11,7 @@ export interface Song {
   lyrics_karaoke?: string;
   lyrics_display: string;
   lyrics_sections: string;
+  whisper_engine?: string;
   duration_seconds: number;
   bpm: number;
   key: string;
@@ -39,8 +40,37 @@ export interface Song {
   karaoke_alignment?: number;
   karaoke_margin_bottom?: number;
   
+  // AI-powered metadata enrichment
+  genre_primary?: string;
+  genre_secondary?: string;  // JSON array
+  tags?: string;  // JSON array
+  style_descriptors?: string;  // JSON array
+  mood?: string;  // JSON array
+  themes?: string;  // JSON array
+  similar_artists?: string;  // JSON array
+  summary?: string;
+  target_audience?: string;
+  energy_level?: string;
+  vocal_style?: string;
+  metadata_enriched_at?: string;
+  metadata_version?: number;
+  
   created_at: string;
   updated_at: string;
+}
+
+export interface SongMetadataEnrichment {
+  genre_primary: string;
+  genre_secondary: string[];
+  tags: string[];
+  style_descriptors: string[];
+  mood: string[];
+  themes: string[];
+  similar_artists: string[];
+  summary: string;
+  target_audience: string;
+  energy_level: string;
+  vocal_style: string;
 }
 
 export interface QueueItem {
@@ -207,17 +237,33 @@ class APIClient {
     if (!res.ok) throw new Error('Failed to delete song');
   }
 
-  async analyzeSong(id: number): Promise<Song> {
+  async analyzeSong(id: number): Promise<{song: Song, analysis: any, enrichment?: SongMetadataEnrichment}> {
     await this.ensureHealthy();
     const res = await fetch(`${this.baseURL}/songs/${id}/analyze`, {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to analyze audio');
-    const data = await res.json();
-    return data.song;
+    return await res.json();
   }
 
-  async uploadAudio(id: number, vocalsFile?: File, musicFile?: File): Promise<Song> {
+  async validateAudioPaths(id: number): Promise<{
+    song_id: number;
+    title: string;
+    valid: boolean;
+    vocals_ok?: string;
+    vocals_missing?: string;
+    music_ok?: string;
+    music_missing?: string;
+    mixed_ok?: string;
+    mixed_missing?: string;
+  }> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${id}/validate-paths`);
+    if (!res.ok) throw new Error('Failed to validate audio paths');
+    return res.json();
+  }
+
+  async uploadAudio(id: number, vocalsFile?: File, musicFile?: File): Promise<void> {
     await this.ensureHealthy();
     const formData = new FormData();
     
@@ -234,9 +280,10 @@ class APIClient {
       body: formData,
     });
     
-    if (!res.ok) throw new Error('Failed to upload audio files');
-    const data = await res.json();
-    return data.song;
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to upload audio files' }));
+      throw new Error(error.error || 'Failed to upload audio files');
+    }
   }
 
   // Queue
@@ -428,6 +475,41 @@ class APIClient {
       body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error('Failed to save settings');
+    return await res.json();
+  }
+
+  // ========== Metadata Enrichment APIs ==========
+  
+  async enrichSongMetadata(songId: number, forceRefresh: boolean = false): Promise<{message: string, song_id: number, enrichment: SongMetadataEnrichment}> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${songId}/enrich-metadata`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ force_refresh: forceRefresh }),
+    });
+    if (!res.ok) throw new Error('Failed to enrich metadata');
+    return await res.json();
+  }
+
+  async enrichBatch(songIds: number[], forceRefresh: boolean = false): Promise<{total: number, success: number, errors: number, results: any[]}> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/enrichment/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ song_ids: songIds, force_refresh: forceRefresh }),
+    });
+    if (!res.ok) throw new Error('Failed to enrich batch');
+    return await res.json();
+  }
+
+  async getEnrichmentStatus(): Promise<{total_songs: number, enriched_count: number, unenriched_count: number, unenriched_songs: any[]}> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/enrichment/status`);
+    if (!res.ok) throw new Error('Failed to get enrichment status');
     return await res.json();
   }
 }

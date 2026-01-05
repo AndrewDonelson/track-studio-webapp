@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, Song, GeneratedImage } from '@/lib/api';
+import { api, Song, GeneratedImage, SongMetadataEnrichment } from '@/lib/api';
 
 type NotificationType = 'success' | 'error' | 'info';
 
@@ -43,6 +43,11 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   const [regeneratingImages, setRegeneratingImages] = useState<Set<number>>(new Set());
   const [imageTimestamps, setImageTimestamps] = useState<Map<number, number>>(new Map());
   const [generatingPrompts, setGeneratingPrompts] = useState<Set<number>>(new Set());
+  const [enrichmentData, setEnrichmentData] = useState<SongMetadataEnrichment | null>(null);
+  const [hasVocalsOnServer, setHasVocalsOnServer] = useState(false);
+  const [hasMusicOnServer, setHasMusicOnServer] = useState(false);
+  const [renderLog, setRenderLog] = useState<string>('');
+  const [loadingLog, setLoadingLog] = useState(false);
 
   const showNotification = (type: NotificationType, message: string) => {
     const id = Date.now() + Math.random(); // Unique ID using timestamp + random
@@ -83,6 +88,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     loadSong();
     loadImages();
+    loadRenderLog();
   }, [songId]);
 
   // Load Google Font dynamically when font family changes
@@ -101,12 +107,67 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     }
   }, [formData.karaoke_font_family]);
 
+  // Helper function to safely parse JSON fields
+  const safeJsonParse = (value: string | undefined | null, fallback: any = []): any => {
+    if (!value) return fallback;
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      console.error('JSON parse error for value:', value, err);
+      return fallback;
+    }
+  };
+
   const loadSong = async () => {
     try {
       setLoading(true);
       const song = await api.getSong(songId);
       setFormData(song);
       setOriginalData(song);
+      
+      // Load enrichment data if available - check for any enrichment fields
+      const hasEnrichmentData = song.genre_primary || song.genre_secondary || song.tags || 
+                                song.mood || song.themes || song.style_descriptors || 
+                                song.similar_artists || song.summary || song.target_audience || 
+                                song.energy_level || song.vocal_style;
+      
+      if (hasEnrichmentData) {
+        try {
+          const enrichment: SongMetadataEnrichment = {
+            genre_primary: song.genre_primary || '',
+            genre_secondary: safeJsonParse(song.genre_secondary, []),
+            tags: safeJsonParse(song.tags, []),
+            style_descriptors: safeJsonParse(song.style_descriptors, []),
+            mood: safeJsonParse(song.mood, []),
+            themes: safeJsonParse(song.themes, []),
+            similar_artists: safeJsonParse(song.similar_artists, []),
+            summary: song.summary || '',
+            target_audience: song.target_audience || '',
+            energy_level: song.energy_level || '',
+            vocal_style: song.vocal_style || ''
+          };
+          setEnrichmentData(enrichment);
+          console.log('Loaded enrichment data:', enrichment);
+        } catch (parseErr) {
+          console.error('Failed to parse enrichment data:', parseErr);
+          console.log('Raw song data:', { 
+            genre_primary: song.genre_primary,
+            genre_secondary: song.genre_secondary,
+            tags: song.tags 
+          });
+        }
+      }
+      
+      // Validate audio files exist on server
+      try {
+        const validation = await api.validateAudioPaths(songId);
+        setHasVocalsOnServer(!!validation.vocals_ok);
+        setHasMusicOnServer(!!validation.music_ok);
+      } catch (err) {
+        console.error('Failed to validate audio paths:', err);
+        setHasVocalsOnServer(false);
+        setHasMusicOnServer(false);
+      }
       
       // Check if this song has a completed video
       const queue = await api.getQueue();
@@ -159,23 +220,66 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  const loadRenderLog = async () => {
+    try {
+      setLoadingLog(true);
+      const response = await fetch(`http://localhost:8080/api/v1/songs/${songId}/render-log`);
+      if (response.ok) {
+        const data = await response.json();
+        setRenderLog(data.log || '');
+      } else {
+        setRenderLog('');
+      }
+    } catch (err) {
+      console.error('Failed to load render log:', err);
+      setRenderLog('');
+    } finally {
+      setLoadingLog(false);
+    }
+  };
+
+  const copyLogToClipboard = () => {
+    navigator.clipboard.writeText(renderLog);
+    showNotification('success', 'Log copied to clipboard');
+  };
+
   const handleAnalyzeAudio = async () => {
     try {
       setAnalyzing(true);
-      showNotification('info', 'Analyzing audio...');
-      const updatedSong = await api.analyzeSong(songId);
+      showNotification('info', 'Analyzing audio and enriching metadata...');
+      const result = await api.analyzeSong(songId);
       
-      // Update form with analysis results
+      // Update form with analysis results AND enrichment data
       setFormData(prev => ({
         ...prev,
-        duration_seconds: updatedSong.duration_seconds,
-        bpm: updatedSong.bpm,
-        key: updatedSong.key,
-        tempo: updatedSong.tempo,
-        genre: updatedSong.genre || prev.genre,
+        duration_seconds: result.song.duration_seconds,
+        bpm: result.song.bpm,
+        key: result.song.key,
+        tempo: result.song.tempo,
+        genre: result.song.genre || prev.genre,
+        // Save enrichment data into formData so it persists
+        genre_primary: result.enrichment?.genre_primary || prev.genre_primary,
+        genre_secondary: result.enrichment?.genre_secondary ? JSON.stringify(result.enrichment.genre_secondary) : prev.genre_secondary,
+        tags: result.enrichment?.tags ? JSON.stringify(result.enrichment.tags) : prev.tags,
+        style_descriptors: result.enrichment?.style_descriptors ? JSON.stringify(result.enrichment.style_descriptors) : prev.style_descriptors,
+        mood: result.enrichment?.mood ? JSON.stringify(result.enrichment.mood) : prev.mood,
+        themes: result.enrichment?.themes ? JSON.stringify(result.enrichment.themes) : prev.themes,
+        similar_artists: result.enrichment?.similar_artists ? JSON.stringify(result.enrichment.similar_artists) : prev.similar_artists,
+        summary: result.enrichment?.summary || prev.summary,
+        target_audience: result.enrichment?.target_audience || prev.target_audience,
+        energy_level: result.enrichment?.energy_level || prev.energy_level,
+        vocal_style: result.enrichment?.vocal_style || prev.vocal_style,
       }));
       
-      showNotification('success', 'Audio analysis complete!');
+      // Store enrichment data for display
+      if (result.enrichment) {
+        setEnrichmentData(result.enrichment);
+        showNotification('success', 'Audio analysis and metadata enrichment complete!');
+      } else {
+        showNotification('success', 'Audio analysis complete!');
+      }
+      
+      setHasChanges(true);
     } catch (err) {
       showNotification('error', 'Failed to analyze audio: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -183,13 +287,20 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
     }
   };
 
-  const handleFileSelect = (type: 'vocals_stem_path' | 'music_stem_path') => {
+  const handleFileSelect = async (type: 'vocals_stem_path' | 'music_stem_path') => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = (e) => {
+    input.accept = '.flac,.wav,.mp3,audio/flac,audio/wav,audio/mpeg';
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
+        // Validate file extension
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (!['flac', 'wav', 'mp3'].includes(ext || '')) {
+          showNotification('error', 'Please select a FLAC, WAV, or MP3 file');
+          return;
+        }
+
         // Store the file
         if (type === 'vocals_stem_path') {
           setVocalsFile(file);
@@ -204,8 +315,40 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           [type === 'vocals_stem_path' ? 'vocals' : 'music']: audio,
         }));
 
-        setHasChanges(true);
         showNotification('success', `Selected: ${file.name}`);
+        
+        // Auto-upload the file immediately
+        try {
+          setUploading(true);
+          showNotification('info', 'Uploading to server...');
+          
+          await api.uploadAudio(
+            songId,
+            type === 'vocals_stem_path' ? file : undefined,
+            type === 'music_stem_path' ? file : undefined
+          );
+
+          // Update server status
+          if (type === 'vocals_stem_path') {
+            setHasVocalsOnServer(true);
+            setVocalsFile(null);
+          } else {
+            setHasMusicOnServer(true);
+            setMusicFile(null);
+          }
+
+          showNotification('success', `${type === 'vocals_stem_path' ? 'Vocals' : 'Music'} uploaded successfully!`);
+          
+          // Refresh validation
+          const validation = await api.validateAudioPaths(songId);
+          setHasVocalsOnServer(!!validation.vocals_ok);
+          setHasMusicOnServer(!!validation.music_ok);
+        } catch (err) {
+          showNotification('error', 'Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+          // Keep the file selected so user can retry
+        } finally {
+          setUploading(false);
+        }
       }
     };
     input.click();
@@ -264,20 +407,26 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       setUploading(true);
       showNotification('info', 'Uploading audio files...');
 
-      const updatedSong = await api.uploadAudio(songId, vocalsFile, musicFile);
+      await api.uploadAudio(songId, vocalsFile || undefined, musicFile || undefined);
 
-      // Update form with server paths
-      setFormData(prev => ({
-        ...prev,
-        vocals_stem_path: updatedSong.vocals_stem_path || prev.vocals_stem_path,
-        music_stem_path: updatedSong.music_stem_path || prev.music_stem_path,
-      }));
+      // Update file existence flags
+      if (vocalsFile) setHasVocalsOnServer(true);
+      if (musicFile) setHasMusicOnServer(true);
 
       // Clear file state
       setVocalsFile(null);
       setMusicFile(null);
 
       showNotification('success', 'Audio files uploaded successfully!');
+      
+      // Refresh validation status
+      try {
+        const validation = await api.validateAudioPaths(songId);
+        setHasVocalsOnServer(!!validation.vocals_ok);
+        setHasMusicOnServer(!!validation.music_ok);
+      } catch (err) {
+        console.error('Failed to re-validate audio paths:', err);
+      }
     } catch (err) {
       showNotification('error', 'Failed to upload files: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -294,9 +443,9 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       setHasChanges(false);
       setOriginalData(formData);
       showNotification('success', 'Song saved successfully!');
-      setTimeout(() => router.push('/songs'), 1000);
     } catch (err) {
       showNotification('error', 'Failed to save song: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
       setSaving(false);
     }
   };
@@ -377,18 +526,17 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   };
 
   const handleRender = async () => {
+    // Auto-save if there are changes
     if (hasChanges) {
-      showConfirm('You have unsaved changes. Save before rendering?', async () => {
-        try {
-          await api.updateSong(songId, formData);
-          setHasChanges(false);
-          setOriginalData(formData);
-          proceedToRender();
-        } catch (err) {
-          showNotification('error', 'Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'));
-        }
-      });
-      return;
+      try {
+        showNotification('info', 'Saving changes before rendering...');
+        await api.updateSong(songId, formData);
+        setHasChanges(false);
+        setOriginalData(formData);
+      } catch (err) {
+        showNotification('error', 'Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        return;
+      }
     }
     
     proceedToRender();
@@ -919,7 +1067,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           <button
             type="button"
             onClick={handleAnalyzeAudio}
-            disabled={analyzing || !formData.vocals_stem_path && !formData.music_stem_path}
+            disabled={analyzing || (!hasVocalsOnServer && !hasMusicOnServer)}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             title="Analyze audio files to detect BPM, key, tempo, and genre"
           >
@@ -937,7 +1085,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Audio Analysis Info (Read-only) */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
             <div className="text-gray-400 text-sm mb-1">Duration</div>
             <div className="text-2xl font-bold">
@@ -955,6 +1103,18 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
             <div className="text-gray-400 text-sm mb-1">Tempo</div>
             <div className="text-2xl font-bold">{formData.tempo || '--'}</div>
+          </div>
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
+            <div className="text-gray-400 text-sm mb-1">Whisper Engine</div>
+            <div className="text-lg font-bold">
+              {formData.whisper_engine === 'whisperx' ? (
+                <span className="text-green-400" title="GPU-accelerated">WhisperX</span>
+              ) : formData.whisper_engine === 'faster-whisper' ? (
+                <span className="text-blue-400" title="CPU-based">Faster-Whisper</span>
+              ) : (
+                <span className="text-gray-500">--</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -989,7 +1149,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Genre</label>
+            <label className="block text-sm font-medium mb-2">Genre (Primary)</label>
             <select
               name="genre"
               value={formData.genre || ''}
@@ -998,64 +1158,224 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
             >
               <option value="">Select Genre</option>
-              <option value="Rock">Rock</option>
               <option value="Pop">Pop</option>
-              <option value="Hip-Hop">Hip-Hop</option>
-              <option value="R&B">R&B</option>
+              <option value="Rock">Rock</option>
+              <option value="Hip-Hop/Rap">Hip-Hop/Rap</option>
               <option value="Country">Country</option>
-              <option value="Electronic">Electronic</option>
-              <option value="Dance">Dance</option>
+              <option value="R&B/Soul">R&B/Soul</option>
+              <option value="Electronic/Dance">Electronic/Dance</option>
+              <option value="Latin">Latin</option>
+              <option value="Metal">Metal</option>
               <option value="Jazz">Jazz</option>
               <option value="Blues">Blues</option>
-              <option value="Classical">Classical</option>
-              <option value="Metal">Metal</option>
-              <option value="Indie">Indie</option>
               <option value="Folk">Folk</option>
+              <option value="Classical">Classical</option>
               <option value="Reggae">Reggae</option>
-              <option value="Soul">Soul</option>
-              <option value="Funk">Funk</option>
-              <option value="Alternative">Alternative</option>
-              <option value="Punk">Punk</option>
-              <option value="Gospel">Gospel</option>
-              <option value="Other">Other</option>
+              <option value="Gospel/Christian">Gospel/Christian</option>
+              <option value="Ballad">Ballad</option>
             </select>
+            {enrichmentData && enrichmentData.genre_primary && enrichmentData.genre_primary !== formData.genre && (
+              <div className="mt-2 text-sm text-blue-400">
+                AI suggested: {enrichmentData.genre_primary}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* AI Metadata Enrichment Section */}
+        {enrichmentData && (
+          <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 border border-purple-700 rounded-lg p-6 space-y-4">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <span>✨</span> AI-Generated Metadata
+            </h2>
+
+            {/* Secondary Genres */}
+            {enrichmentData.genre_secondary && enrichmentData.genre_secondary.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Secondary Genres</label>
+                <div className="flex flex-wrap gap-2">
+                  {enrichmentData.genre_secondary.map((genre, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-purple-900/50 border border-purple-700 rounded-full text-sm">
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            {enrichmentData.summary && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Summary</label>
+                <p className="text-gray-300 bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+                  {enrichmentData.summary}
+                </p>
+              </div>
+            )}
+
+            {/* Tags, Mood, Themes in a grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Tags */}
+              {enrichmentData.tags && enrichmentData.tags.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Tags</label>
+                  <div className="flex flex-wrap gap-1">
+                    {enrichmentData.tags.map((tag, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-blue-900/50 border border-blue-700 rounded text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Mood */}
+              {enrichmentData.mood && enrichmentData.mood.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Mood</label>
+                  <div className="flex flex-wrap gap-1">
+                    {enrichmentData.mood.map((mood, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-green-900/50 border border-green-700 rounded text-xs">
+                        {mood}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Themes */}
+              {enrichmentData.themes && enrichmentData.themes.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Themes</label>
+                  <div className="flex flex-wrap gap-1">
+                    {enrichmentData.themes.map((theme, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-yellow-900/50 border border-yellow-700 rounded text-xs">
+                        {theme}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Style Descriptors & Energy Level */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {enrichmentData.style_descriptors && enrichmentData.style_descriptors.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Style</label>
+                  <div className="flex flex-wrap gap-1">
+                    {enrichmentData.style_descriptors.map((style, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-indigo-900/50 border border-indigo-700 rounded text-xs">
+                        {style}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {enrichmentData.energy_level && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-300">Energy Level</label>
+                  <div className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg">
+                    {enrichmentData.energy_level}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Similar Artists */}
+            {enrichmentData.similar_artists && enrichmentData.similar_artists.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Similar Artists</label>
+                <div className="flex flex-wrap gap-2">
+                  {enrichmentData.similar_artists.map((artist, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-pink-900/50 border border-pink-700 rounded-full text-sm">
+                      {artist}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Target Audience & Vocal Style */}
+            {(enrichmentData.target_audience || enrichmentData.vocal_style) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {enrichmentData.target_audience && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-300">Target Audience</label>
+                    <div className="text-gray-300 bg-gray-900/50 rounded-lg p-3 border border-gray-700 text-sm">
+                      {enrichmentData.target_audience}
+                    </div>
+                  </div>
+                )}
+
+                {enrichmentData.vocal_style && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-300">Vocal Style</label>
+                    <div className="text-gray-300 bg-gray-900/50 rounded-lg p-3 border border-gray-700 text-sm">
+                      {enrichmentData.vocal_style}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-700">
+              This metadata was generated by AI based on lyrics, BPM, key, and tempo analysis
+            </div>
+          </div>
+        )}
 
         {/* Visualization Settings */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Visualization Settings</h2>
           
           <div>
-            <label className="block text-sm font-medium mb-2">Spectrum Style</label>
+            <label className="block text-sm font-medium mb-2">Spectrum Location</label>
             <select
               name="spectrum_style"
               value={formData.spectrum_style}
               onChange={handleChange}
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
             >
-              <option value="stereo">Stereo (bars on edges)</option>
-              <option value="center">Center</option>
-              <option value="bottom">Bottom</option>
-              <option value="circle">Circle</option>
+              <option value="stereo">Stereo (bars on left/right edges)</option>
+              <option value="showfreqs">Equalizer Bars</option>
+              <option value="showspectrum">Spectrum Display</option>
+              <option value="showcqt">CQT Spectrum (Professional)</option>
+              <option value="showwaves">Waveform</option>
+              <option value="showvolume">Volume Meter</option>
+              <option value="avectorscope">Vector Scope (Circle)</option>
             </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-2">Spectrum Color</label>
-            <select
-              name="spectrum_color"
-              value={formData.spectrum_color}
-              onChange={handleChange}
-              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
-            >
-              <option value="white">White</option>
-              <option value="blue">Blue</option>
-              <option value="red">Red</option>
-              <option value="green">Green</option>
-              <option value="purple">Purple</option>
-              <option value="rainbow">Rainbow</option>
-            </select>
+            <div className="space-y-2">
+              <select
+                name="spectrum_color"
+                value={formData.spectrum_color}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value="rainbow">Rainbow Gradient</option>
+                <option value="gray">Neutral Gray (Default)</option>
+                <option value="white">White</option>
+                <option value="red">Red</option>
+                <option value="orange">Orange</option>
+                <option value="yellow">Yellow</option>
+                <option value="green">Green</option>
+                <option value="cyan">Cyan</option>
+                <option value="blue">Blue</option>
+                <option value="purple">Purple</option>
+                <option value="magenta">Magenta</option>
+                <option value="pink">Pink</option>
+                <option value="brown">Brown</option>
+                <option value="lime">Lime</option>
+                <option value="teal">Teal</option>
+                <option value="navy">Navy</option>
+                <option value="maroon">Maroon</option>
+              </select>
+            </div>
           </div>
 
           <div>
@@ -1391,17 +1711,27 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Audio Files</h2>
           
+          {/* Upload Instructions */}
+          {!hasVocalsOnServer && !hasMusicOnServer && (
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-4">
+              <p className="text-blue-300 text-sm">
+                📤 Please upload <strong>Vocal</strong> and <strong>Instrumental</strong> stems for this song.
+                The server will automatically rename them to the correct format.
+              </p>
+            </div>
+          )}
+          
           {/* Server Files Status */}
           <div className="flex gap-3 mb-4">
             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-              formData.vocals_stem_path ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-red-900/30 text-red-400 border border-red-700'
+              hasVocalsOnServer ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-gray-700/50 text-gray-400 border border-gray-600'
             }`}>
-              {formData.vocals_stem_path ? '✓ vocals.wav' : '✗ vocals.wav'}
+              {hasVocalsOnServer ? '✓ Vocals on server' : '○ No vocals uploaded'}
             </div>
             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-              formData.music_stem_path ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-red-900/30 text-red-400 border border-red-700'
+              hasMusicOnServer ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-gray-700/50 text-gray-400 border border-gray-600'
             }`}>
-              {formData.music_stem_path ? '✓ instrumental.wav' : '✗ instrumental.wav'}
+              {hasMusicOnServer ? '✓ Instrumental on server' : '○ No instrumental uploaded'}
             </div>
           </div>
 
@@ -1692,13 +2022,56 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           )}
         </div>
 
+        {/* Render Log Section */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Render Log</h2>
+            {renderLog && (
+              <button
+                type="button"
+                onClick={copyLogToClipboard}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition flex items-center gap-2"
+              >
+                <span>📋</span>
+                <span>Copy Log</span>
+              </button>
+            )}
+          </div>
+          
+          {loadingLog ? (
+            <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-8 text-center">
+              <div className="text-gray-500">Loading render log...</div>
+            </div>
+          ) : renderLog ? (
+            <textarea
+              value={renderLog}
+              readOnly
+              className="w-full h-96 bg-gray-900 border border-gray-700 rounded p-4 font-mono text-sm text-gray-300 resize-none"
+              style={{ fontFamily: 'monospace' }}
+            />
+          ) : (
+            <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-8 text-center">
+              <div className="text-gray-500 mb-2">
+                <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div className="text-lg font-medium mb-1">No Render Log Available</div>
+                <div className="text-sm">
+                  Render log will appear here after video generation
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Actions */}
         <div className="space-y-3">
           <div className="flex gap-4">
             <button
               type="submit"
-              disabled={saving}
-              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50"
+              disabled={saving || !hasChanges}
+              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              title={hasChanges ? 'Save your changes' : 'No changes to save'}
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1715,7 +2088,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
           <button
             type="button"
             onClick={handleRender}
-            disabled={!formData.vocals_stem_path && !formData.music_stem_path}
+            disabled={!hasVocalsOnServer && !hasMusicOnServer}
             className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             title={hasVideo && !hasChanges ? 'Already rendered - will re-render with current settings' : hasChanges ? 'Will save changes before rendering' : 'Add to render queue'}
           >
