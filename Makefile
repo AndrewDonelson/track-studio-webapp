@@ -72,8 +72,8 @@ clean:
 ## deploy-mule: Deploy to mule.nlaakstudios
 deploy-mule: build
 	@echo "$(COLOR_GREEN)Deploying webapp to $(MULE_HOST)...$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)→ Checking Node.js installation...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "command -v node >/dev/null 2>&1 || (echo 'Installing Node.js...'; curl -fsSL https://deb.nodesource.com/setup_20.x | echo '$(SUDO_PASS)' | sudo -S bash - && echo '$(SUDO_PASS)' | sudo -S apt-get install -y nodejs)" || true
+	@echo "$(COLOR_BLUE)→ Checking Node.js and npm installation...$(COLOR_RESET)"
+	@ssh $(MULE_HOST) "echo 'Installing Node.js 20.x and npm...'; curl -fsSL https://deb.nodesource.com/setup_20.x | echo '$(SUDO_PASS)' | sudo -S bash - && echo '$(SUDO_PASS)' | sudo -S apt-get install -y nodejs npm" || true
 	@echo "$(COLOR_BLUE)→ Stopping existing webapp...$(COLOR_RESET)"
 	-@ssh $(MULE_HOST) "pkill -f 'next start'" 2>/dev/null || true
 	@sleep 1
@@ -86,9 +86,9 @@ deploy-mule: build
 		--exclude='.next/cache' \
 		./ $(MULE_HOST):$(MULE_PATH)/
 	@echo "$(COLOR_BLUE)→ Installing dependencies on mule...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "cd $(MULE_PATH) && npm install --production"
+	@ssh $(MULE_HOST) "cd $(MULE_PATH) && export PATH=\"$PATH:/usr/local/bin:/usr/bin\" && npm install --production"
 	@echo "$(COLOR_BLUE)→ Starting webapp...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "cd $(MULE_PATH) && PORT=$(WEBAPP_PORT) nohup npm start > webapp.log 2>&1 &"
+	@ssh $(MULE_HOST) "cd $(MULE_PATH) && export PATH=\"$PATH:/usr/local/bin:/usr/bin\" && PORT=$(WEBAPP_PORT) HOST=0.0.0.0 nohup npm start > webapp.log 2>&1 &"
 	@sleep 3
 	@echo "$(COLOR_GREEN)✓ Deployment complete!$(COLOR_RESET)"
 	@echo ""
