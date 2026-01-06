@@ -1,9 +1,4 @@
-  async getDashboard(): Promise<any> {
-    await this.ensureHealthy();
-    const res = await fetch(`${this.baseURL}/dashboard`);
-    if (!res.ok) throw new Error('Failed to load dashboard');
-    return res.json();
-  }
+// ...existing code...
 // API client for TrackStudio orchestrator
 
 const LOCAL_KEY = "trackstudio_settings";
@@ -176,6 +171,12 @@ export interface Settings {
 }
 
 class APIClient {
+    async getDashboard(): Promise<any> {
+      await this.ensureHealthy();
+      const res = await fetch(`${this.baseURL}/dashboard`);
+      if (!res.ok) throw new Error('Failed to load dashboard');
+      return res.json();
+    }
   private lastHealthCheck: number = 0;
   private healthCheckInterval: number = 30000; // 30 seconds
   private isHealthy: boolean = true;
