@@ -43,7 +43,7 @@ help:
 ## dev: Run in development mode
 dev:
 	@echo "$(COLOR_GREEN)Starting development server...$(COLOR_RESET)"
-	npm run dev
+	HOST=0.0.0.0 npm run dev
 
 ## build: Build production bundle
 build:
@@ -54,7 +54,7 @@ build:
 ## start: Start production server locally
 start:
 	@echo "$(COLOR_GREEN)Starting production server...$(COLOR_RESET)"
-	npm run start
+	HOST=0.0.0.0 nohup npm start
 
 ## install: Install dependencies
 install:
