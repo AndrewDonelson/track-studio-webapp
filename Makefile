@@ -72,8 +72,6 @@ clean:
 ## deploy-mule: Deploy to mule.nlaakstudios
 deploy-mule: build
 	@echo "$(COLOR_GREEN)Deploying webapp to $(MULE_HOST)...$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)→ Checking Node.js and npm installation...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "echo 'Installing Node.js 20.x and npm...'; curl -fsSL https://deb.nodesource.com/setup_20.x | echo '$(SUDO_PASS)' | sudo -S bash - && echo '$(SUDO_PASS)' | sudo -S apt-get install -y nodejs npm" || true
 	@echo "$(COLOR_BLUE)→ Stopping existing webapp...$(COLOR_RESET)"
 	-@ssh $(MULE_HOST) "pkill -f 'next start'" 2>/dev/null || true
 	@sleep 1

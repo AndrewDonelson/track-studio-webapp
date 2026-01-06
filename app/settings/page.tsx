@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react';
 const LOCAL_KEY = "trackstudio_settings";
 import { api } from '@/lib/api';
 
+
+interface Settings {
   id?: number;
   master_prompt: string;
   master_negative_prompt: string;
