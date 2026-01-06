@@ -1,3 +1,9 @@
+  async getDashboard(): Promise<any> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/dashboard`);
+    if (!res.ok) throw new Error('Failed to load dashboard');
+    return res.json();
+  }
 // API client for TrackStudio orchestrator
 
 const LOCAL_KEY = "trackstudio_settings";

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { api } from '@/lib/api';
 
 interface DashboardStats {
   // Current Status
@@ -71,9 +72,7 @@ export default function DashboardPage() {
 
   const loadDashboard = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/v1/dashboard');
-      if (!response.ok) throw new Error('Failed to load dashboard');
-      const data = await response.json();
+      const data = await api.getDashboard();
       setStats(data);
       setError(null);
     } catch (err) {
