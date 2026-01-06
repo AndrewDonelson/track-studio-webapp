@@ -17,6 +17,9 @@ function getOrchestratorBaseUrl(): string {
         }
       } catch {}
     }
+    // Fallback: use current hostname if not set
+    const host = window.location.hostname;
+    return `http://${host}:8080/api/v1`;
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 }
