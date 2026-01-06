@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+const LOCAL_KEY = "trackstudio_settings";
 import { api } from '@/lib/api';
 
-interface Settings {
   id?: number;
   master_prompt: string;
   master_negative_prompt: string;
   brand_logo_path: string;
   data_storage_path: string;
+  orchestrator_host?: string;
+  ai_host?: string;
 }
 
 export default function SettingsPage() {
@@ -17,6 +20,8 @@ export default function SettingsPage() {
     master_negative_prompt: '',
     brand_logo_path: '',
     data_storage_path: '~/track-studio-data',
+    orchestrator_host: '',
+    ai_host: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,8 +29,18 @@ export default function SettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+
   useEffect(() => {
+    // Load from backend
     loadSettings();
+    // Load from localStorage (for frontend API usage)
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch {}
+    }
   }, []);
 
   const loadSettings = async () => {
@@ -52,6 +67,15 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
+
+    // Save to localStorage for frontend API usage
+    localStorage.setItem(
+      LOCAL_KEY,
+      JSON.stringify({
+        orchestrator_host: settings.orchestrator_host,
+        ai_host: settings.ai_host,
+      })
+    );
 
     try {
       await api.saveSettings(settings);
@@ -121,6 +145,34 @@ export default function SettingsPage() {
       )}
 
       <div className="bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
+        {/* Orchestrator Host */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Orchestrator API Host
+            <span className="text-gray-400 text-xs ml-2">(e.g. http://192.168.1.200:8080)</span>
+          </label>
+          <input
+            type="text"
+            value={settings.orchestrator_host || ''}
+            onChange={e => setSettings({ ...settings, orchestrator_host: e.target.value })}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="http://192.168.1.200:8080"
+          />
+        </div>
+        {/* AI Host */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            AI Models Host
+            <span className="text-gray-400 text-xs ml-2">(e.g. http://192.168.1.76)</span>
+          </label>
+          <input
+            type="text"
+            value={settings.ai_host || ''}
+            onChange={e => setSettings({ ...settings, ai_host: e.target.value })}
+            className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="http://192.168.1.76"
+          />
+        </div>
         {/* Master Prompt */}
         <div>
           <label className="block text-sm font-medium mb-2">

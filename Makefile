@@ -54,7 +54,7 @@ build:
 ## start: Start production server locally
 start:
 	@echo "$(COLOR_GREEN)Starting production server...$(COLOR_RESET)"
-	HOST=0.0.0.0 nohup npm start
+	HOST=0.0.0.0 npm start
 
 ## install: Install dependencies
 install:

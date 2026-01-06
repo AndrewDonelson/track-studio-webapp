@@ -1,5 +1,25 @@
 // API client for TrackStudio orchestrator
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+
+const LOCAL_KEY = "trackstudio_settings";
+function getOrchestratorBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.orchestrator_host) {
+          // Ensure trailing /api/v1 if not present
+          let url = parsed.orchestrator_host;
+          if (!url.endsWith('/api/v1')) {
+            url = url.replace(/\/$/, '') + '/api/v1';
+          }
+          return url;
+        }
+      } catch {}
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+}
 
 export interface Song {
   id: number;
@@ -147,13 +167,12 @@ export interface Settings {
 }
 
 class APIClient {
-  private baseURL: string;
   private lastHealthCheck: number = 0;
   private healthCheckInterval: number = 30000; // 30 seconds
   private isHealthy: boolean = true;
 
-  constructor(baseURL: string = API_BASE_URL) {
-    this.baseURL = baseURL;
+  get baseURL(): string {
+    return getOrchestratorBaseUrl();
   }
 
   // Health check
