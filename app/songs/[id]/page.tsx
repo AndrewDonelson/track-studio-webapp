@@ -223,13 +223,8 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
   const loadRenderLog = async () => {
     try {
       setLoadingLog(true);
-      const response = await fetch(`http://localhost:8080/api/v1/songs/${songId}/render-log`);
-      if (response.ok) {
-        const data = await response.json();
-        setRenderLog(data.log || '');
-      } else {
-        setRenderLog('');
-      }
+      const data = await api.getRenderLog(songId);
+      setRenderLog(data.log || '');
     } catch (err) {
       console.error('Failed to load render log:', err);
       setRenderLog('');
@@ -1905,7 +1900,7 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                   <div className="relative aspect-video bg-gray-800 rounded overflow-hidden">
                     {image.image_path && image.image_path !== '' ? (
                       <img
-                        src={`http://localhost:8080/${image.image_path.replace('storage/', '')}?t=${imageTimestamps.get(image.id) || Date.now()}`}
+                        src={`${api.baseURL.replace('api/v1', '')}${image.image_path.replace('storage/', '')}?t=${imageTimestamps.get(image.id) || Date.now()}`}
                         alt={`${image.image_type} ${image.sequence_number}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {

@@ -476,7 +476,7 @@ export default function VideosGalleryPage() {
                 {/* Thumbnail */}
                 <Link href={`/videos/${video.id}`} className="block relative aspect-video bg-gray-900">
                   <video
-                    src={`http://localhost:8080/videos/${video.video_file_path}`}
+                    src={`${api.baseURL.replace('api/v1', '')}${video.video_file_path}`}
                     className="w-full h-full object-cover"
                     preload="metadata"
                   />

@@ -128,7 +128,7 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
       {/* Video Player */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <video
-          src={`http://localhost:8080/videos/${video.video_file_path}`}
+          src={`${api.baseURL.replace('api/v1', '')}${video.video_file_path}`}
           controls
           autoPlay
           className="w-full aspect-video bg-black"
@@ -160,7 +160,7 @@ export default function VideoPlayerPage({ params }: { params: Promise<{ id: stri
               </Link>
               <button
                 onClick={() => {
-                  const url = `http://localhost:8080/videos/${video.video_file_path}`;
+                  const url = `${api.baseURL.replace('api/v1', '')}${video.video_file_path}`;
                   window.open(url, '_blank');
                 }}
                 className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg transition font-medium"

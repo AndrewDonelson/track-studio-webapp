@@ -415,7 +415,7 @@ export default function SongsPage() {
             </div>
             <div className="p-4">
               <video 
-                src={`http://localhost:8080/videos/${previewVideo}`}
+                src={`${api.baseURL.replace('api/v1', '')}${previewVideo}`}
                 controls 
                 autoPlay
                 className="w-full rounded-lg"

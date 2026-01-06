@@ -205,7 +205,7 @@ export default function SettingsPage() {
             {settings.brand_logo_path && (
               <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-lg border border-gray-700">
                 <img
-                  src={`${api.baseURL.replace('/api/v1', '')}/${settings.brand_logo_path}`}
+                  src={`${api.baseURL.replace('api/v1', '')}${settings.brand_logo_path}`}
                   alt="Brand Logo"
                   className="w-16 h-16 object-contain bg-white rounded"
                 />

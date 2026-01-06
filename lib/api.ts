@@ -9,20 +9,19 @@ function getOrchestratorBaseUrl(): string {
       try {
         const parsed = JSON.parse(raw);
         if (parsed.orchestrator_host) {
-          // Ensure trailing /api/v1 if not present
-          let url = parsed.orchestrator_host;
-          if (!url.endsWith('/api/v1')) {
-            url = url.replace(/\/$/, '') + '/api/v1';
-          }
+          // Return the base host with trailing slash, stripping any /api/v1 suffix
+          let url = parsed.orchestrator_host.replace(/\/api\/v1\/?$/, '');
+          // Remove trailing slash if present, then add it back
+          url = url.replace(/\/$/, '') + '/';
           return url;
         }
       } catch {}
     }
     // Fallback: use current hostname if not set
     const host = window.location.hostname;
-    return `http://${host}:8080/api/v1`;
+    return `http://${host}:8080/`;
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+  return (process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:8080').replace(/\/$/, '') + '/';
 }
 
 export interface Song {
@@ -182,13 +181,13 @@ class APIClient {
   private isHealthy: boolean = true;
 
   get baseURL(): string {
-    return getOrchestratorBaseUrl();
+    return getOrchestratorBaseUrl() + 'api/v1';
   }
 
   // Health check
   async checkHealth(): Promise<boolean> {
     try {
-      const healthURL = this.baseURL.replace('/api/v1', '/health');
+      const healthURL = getOrchestratorBaseUrl() + 'health';
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
       
@@ -551,6 +550,13 @@ class APIClient {
       body: formData,
     });
     if (!res.ok) throw new Error('Failed to upload logo');
+    return res.json();
+  }
+
+  async getRenderLog(songId: number): Promise<{log: string}> {
+    await this.ensureHealthy();
+    const res = await fetch(`${this.baseURL}/songs/${songId}/render-log`);
+    if (!res.ok) throw new Error('Failed to load render log');
     return res.json();
   }
 }
