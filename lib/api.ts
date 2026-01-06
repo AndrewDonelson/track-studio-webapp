@@ -541,6 +541,18 @@ class APIClient {
     if (!res.ok) throw new Error('Failed to get enrichment status');
     return await res.json();
   }
+
+  async uploadLogo(file: File): Promise<{path: string}> {
+    await this.ensureHealthy();
+    const formData = new FormData();
+    formData.append('logo', file);
+    const res = await fetch(`${this.baseURL}/settings/upload-logo`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Failed to upload logo');
+    return res.json();
+  }
 }
 
 export const api = new APIClient();

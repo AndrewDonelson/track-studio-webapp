@@ -97,17 +97,7 @@ export default function SettingsPage() {
     setMessage(null);
 
     try {
-      const formData = new FormData();
-      formData.append('logo', logoFile);
-
-      const response = await fetch('http://localhost:8080/api/v1/settings/upload-logo', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const result = await response.json();
+      const result = await api.uploadLogo(logoFile);
       setSettings({ ...settings, brand_logo_path: result.path });
       setLogoFile(null);
       setMessage({ type: 'success', text: 'Logo uploaded successfully!' });
@@ -215,7 +205,7 @@ export default function SettingsPage() {
             {settings.brand_logo_path && (
               <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-lg border border-gray-700">
                 <img
-                  src={`http://localhost:8080/${settings.brand_logo_path}`}
+                  src={`${api.baseURL.replace('/api/v1', '')}/${settings.brand_logo_path}`}
                   alt="Brand Logo"
                   className="w-16 h-16 object-contain bg-white rounded"
                 />
