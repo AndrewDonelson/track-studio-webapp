@@ -83,18 +83,8 @@ deploy-mule: build
 		--exclude='.git' \
 		--exclude='.next/cache' \
 		./ $(MULE_HOST):$(MULE_PATH)/
-	@echo "$(COLOR_BLUE)→ Installing dependencies on mule...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "cd $(MULE_PATH) && export PATH=\"$PATH:/usr/local/bin:/usr/bin\" && npm install --production"
-	@echo "$(COLOR_BLUE)→ Starting webapp...$(COLOR_RESET)"
-	@ssh $(MULE_HOST) "cd $(MULE_PATH) && export PATH=\"$PATH:/usr/local/bin:/usr/bin\" && PORT=$(WEBAPP_PORT) HOST=0.0.0.0 nohup npm start > webapp.log 2>&1 &"
-	@sleep 3
 	@echo "$(COLOR_GREEN)✓ Deployment complete!$(COLOR_RESET)"
 	@echo ""
-	@echo "WebApp running on: $(COLOR_BOLD)http://192.168.1.200:$(WEBAPP_PORT)$(COLOR_RESET)"
-	@echo "API endpoint:      $(COLOR_BOLD)http://192.168.1.200:8080$(COLOR_RESET)"
-	@echo ""
-	@echo "Check status with: $(COLOR_BOLD)make status-mule$(COLOR_RESET)"
-	@echo "View logs with:    $(COLOR_BOLD)make logs-mule$(COLOR_RESET)"
 
 ## status-mule: Check webapp status on mule
 status-mule:
