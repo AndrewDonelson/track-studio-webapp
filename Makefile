@@ -42,6 +42,9 @@ help:
 
 ## dev: Run in development mode
 dev:
+	@echo "$(COLOR_YELLOW)Stopping any existing development server...$(COLOR_RESET)"
+	-@pkill -f "next dev" 2>/dev/null || true
+	@sleep 1
 	@echo "$(COLOR_GREEN)Starting development server...$(COLOR_RESET)"
 	HOST=0.0.0.0 npm run dev
 
@@ -53,6 +56,9 @@ build:
 
 ## start: Start production server locally
 start:
+	@echo "$(COLOR_YELLOW)Stopping any existing production server...$(COLOR_RESET)"
+	-@pkill -f "next start" 2>/dev/null || true
+	@sleep 1
 	@echo "$(COLOR_GREEN)Starting production server...$(COLOR_RESET)"
 	HOST=0.0.0.0 npm start
 

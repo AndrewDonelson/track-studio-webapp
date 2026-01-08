@@ -1900,7 +1900,22 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                   <div className="relative aspect-video bg-gray-800 rounded overflow-hidden">
                     {image.image_path && image.image_path !== '' ? (
                       <img
-                        src={`${api.baseURL.replace('api/v1', '')}${image.image_path.replace('storage/', '')}?t=${imageTimestamps.get(image.id) || Date.now()}`}
+                        src={(() => {
+                          // Only verses are numbered, all others use a single shared image
+                          const base = api.baseURL.replace('api/v1', '');
+                          let filename = '';
+                          if (image.image_type === 'verse' && image.sequence_number) {
+                            filename = `bg-verse-${image.sequence_number}.png`;
+                          } else if (image.image_type === 'pre-chorus') {
+                            filename = 'bg-prechorus.png';
+                          } else if (image.image_type === 'final-chorus') {
+                            filename = 'bg-chorus.png';
+                          } else {
+                            filename = `bg-${image.image_type}.png`;
+                          }
+                          // Images are served from /images/song_{songId}/
+                          return `${base}images/song_${songId}/${filename}?t=${imageTimestamps.get(image.id) || Date.now()}`;
+                        })()}
                         alt={`${image.image_type} ${image.sequence_number}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -1912,8 +1927,8 @@ export default function EditSongPage({ params }: { params: Promise<{ id: string 
                     ) : null}
                     <div className={`${image.image_path && image.image_path !== '' ? 'hidden' : ''} absolute inset-0 flex items-center justify-center text-gray-500 text-center p-4`}>
                       <div>
-                        <div className="text-4xl mb-2">📝</div>
-                        <div>Prompt ready to generate</div>
+                        <div className="text-4xl mb-2">{regeneratingImages.has(image.id) ? '⏳' : '📝'}</div>
+                        <div>{regeneratingImages.has(image.id) ? 'Generating...' : (image.image_path && image.image_path !== '' ? 'Image being generated' : 'Prompt ready to generate')}</div>
                         <div className="text-sm mt-1">{image.width}x{image.height}</div>
                       </div>
                     </div>

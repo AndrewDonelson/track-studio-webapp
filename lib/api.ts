@@ -554,10 +554,20 @@ class APIClient {
   }
 
   async getRenderLog(songId: number): Promise<{log: string}> {
-    await this.ensureHealthy();
-    const res = await fetch(`${this.baseURL}/songs/${songId}/render-log`);
-    if (!res.ok) throw new Error('Failed to load render log');
-    return res.json();
+    try {
+      await this.ensureHealthy();
+      const res = await fetch(`${this.baseURL}/songs/${songId}/render-log`);
+      if (res.status === 404) {
+        // Render log doesn't exist yet, return empty log
+        return {log: ''};
+      }
+      if (!res.ok) throw new Error('Failed to load render log');
+      return res.json();
+    } catch (error) {
+      // If fetch fails (network error, etc.), return empty log
+      console.warn('Failed to fetch render log, returning empty log:', error);
+      return {log: ''};
+    }
   }
 }
 
